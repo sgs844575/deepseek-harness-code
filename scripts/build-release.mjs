@@ -34,9 +34,9 @@ const packRoot = path.join(outDir, packDirName);
 const appRes = path.join(packRoot, 'resources', 'app');
 
 const log = (msg) => console.log(`[release] ${msg}`);
-const run = (cmd, cwd = root) => {
+const run = (cmd, cwd = root, env = {}) => {
   log(cmd);
-  execSync(cmd, { stdio: 'inherit', cwd, shell: true });
+  execSync(cmd, { stdio: 'inherit', cwd, shell: true, env: { ...process.env, ...env } });
 };
 const mb = (p) => {
   let total = 0;
@@ -58,7 +58,9 @@ const mb = (p) => {
 run('npm run build:harness');
 if (process.env.SKIP_FORGE !== '1') {
   fs.rmSync(outDir, { recursive: true, force: true });
-  run('npx electron-forge package');
+  // forge 的复制/原生依赖扫描在大 node_modules 上默认 4GB 堆不够，会
+  // "Ineffective mark-compacts near heap limit" OOM，放宽到 8GB。
+  run('npx electron-forge package', root, { NODE_OPTIONS: '--max-old-space-size=8192' });
 }
 if (!fs.existsSync(path.join(packRoot, `${appName}.exe`))) {
   console.error(`[release] 未找到 ${packRoot}\\${appName}.exe，forge package 可能失败`);

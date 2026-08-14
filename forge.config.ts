@@ -11,6 +11,8 @@ const config: ForgeConfig = {
     // 不用 asar：harness 树与 config/harness 以真实目录随包分发（见
     // scripts/build-release.mjs），运行时 paths.ts 以 app.getAppPath() 为根
     // 做路径拼接，asar 内的目录对 file:// 动态加载与 pnpm node_modules 均不可行。
+    // ignore 交给 vite 插件默认值（只保留 .vite 产物与依赖）；deepseek-harness
+    // 等大树由 build-release.mjs 裁剪后单独拷入。
     asar: false,
   },
   rebuildConfig: {},
