@@ -1,0 +1,16 @@
+{
+  "name": "deepseek-harness-code",
+  "version": "0.1.0",
+  "description": "Electron client foundation with layered, single-responsibility architecture",
+  "private": true,
+  "main": "out/main/index.js",
+  "scripts": {
+    "build": "tsc -b && node scripts/copy-static-assets.mjs",
+    "start": "npm run build && electron ."
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "electron": "^42.3.0",
+    "typescript": "^7.0.2"
+  }
+}
