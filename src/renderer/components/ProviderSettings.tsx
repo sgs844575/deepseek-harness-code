@@ -4,18 +4,20 @@ import { requireBridge } from '../ipc/api';
 import { useProviders } from '../state/providers';
 
 /**
- * 模型服务设置（多供应商 / 多 Key，参考 Cherry Studio）：
- * 左列供应商列表（含「添加自定义」），右侧选中供应商的编辑面板——
- * 名称 / API 地址 / 多 Key 管理（批量添加、启停、删除）、模型目录
- * （一键拉取 / 手动增删 / 设为默认）与全局思考偏好。
+ * 模型服务设置（多供应商 / 多 Key，参考 Cherry Studio）——两级页面：
+ * ① 供应商列表页：全部供应商（状态 + 模型数）与「添加自定义供应商」；
+ * ② 供应商配置页（点入）：返回头（供应商名 + 使用中/使用）+ 名称 / API 地址 /
+ *    多 Key 管理（批量添加、启停、删除）、模型目录（一键拉取 / 手动增删 /
+ *    设为默认）与全局思考偏好。
  *
- * 明文 key 只提交给主进程，回显永远脱敏；任何变更经主进程持久化后
- * 以 providers:changed 整包推送回填。
+ * 两页各自独立纵向滚动，不存在双栏对齐问题；明文 key 只提交给主进程，
+ * 回显永远脱敏；任何变更经主进程持久化后以 providers:changed 整包推送回填。
  */
 
 export function ProviderSettings() {
   const { snapshot, loaded, refresh } = useProviders();
-  const [selectedId, setSelectedId] = useState<string>('');
+  /** null = 供应商列表页；非空 = 对应供应商的配置页。 */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [defaultModel, setDefaultModel] = useState('');
   const [flash, setFlash] = useState('');
@@ -31,15 +33,12 @@ export function ProviderSettings() {
     if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
   }, []);
 
-  // 默认选中激活供应商；快照到达后跟随一次。
+  // 打开的供应商被删除（只剩配置页残留）时退回列表页。
   useEffect(() => {
-    if (snapshot.providers.length === 0) return;
-    setSelectedId((current) =>
-      current.length === 0 || !snapshot.providers.some((provider) => provider.id === current)
-        ? snapshot.activeProviderId
-        : current,
-    );
-  }, [snapshot]);
+    if (loaded && selectedId !== null && !snapshot.providers.some((p) => p.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [loaded, snapshot.providers, selectedId]);
 
   const refreshDefaultModel = useCallback(() => {
     void requireBridge()
@@ -53,7 +52,10 @@ export function ProviderSettings() {
   }, [refreshDefaultModel, snapshot.activeProviderId]);
 
   const selected = useMemo(
-    () => snapshot.providers.find((provider) => provider.id === selectedId),
+    () =>
+      selectedId === null
+        ? undefined
+        : snapshot.providers.find((provider) => provider.id === selectedId),
     [snapshot.providers, selectedId],
   );
 
@@ -88,14 +90,51 @@ export function ProviderSettings() {
     return <div className="settingspage__cards"><div className="provflash">正在读取供应商配置…</div></div>;
   }
 
+  /* ── 配置页：返回头 + 选中供应商的编辑面板 ── */
+  if (selected !== undefined) {
+    return (
+      <div className="providersetup providersetup--detail">
+        <div className="provdetail__head">
+          <button type="button" className="provback" onClick={() => setSelectedId(null)}>
+            <BackIcon />
+            模型服务
+          </button>
+          <h1 className="provdetail__title">{selected.name}</h1>
+          {selected.id === snapshot.activeProviderId ? (
+            <span className="provbadge provbadge--active">使用中</span>
+          ) : (
+            <button
+              type="button"
+              className="provbtn provbtn--primary"
+              onClick={() => void activate(selected.id)}
+            >
+              使用
+            </button>
+          )}
+        </div>
+        <ProviderDetail
+          provider={selected}
+          isActive={selected.id === snapshot.activeProviderId}
+          prefs={snapshot.prefs}
+          defaultModel={defaultModel}
+          flash={flash}
+          onMakeDefault={(modelId) => void makeDefault(modelId)}
+          onFlash={notify}
+        />
+      </div>
+    );
+  }
+
+  /* ── 列表页：全部供应商 + 添加自定义 ── */
   return (
     <div className="providersetup">
-      <aside className="providersetup__list">
+      <h1 className="settingspage__title">模型服务</h1>
+      <div className="providersetup__list">
         {snapshot.providers.map((provider) => (
           <button
             type="button"
             key={provider.id}
-            className={`provrow${provider.id === selectedId ? ' provrow--active' : ''}`}
+            className="provrow"
             onClick={() => setSelectedId(provider.id)}
           >
             <span className="provrow__dot" aria-hidden />
@@ -110,6 +149,7 @@ export function ProviderSettings() {
               </span>
             </span>
             {provider.id === snapshot.activeProviderId && <span className="provrow__badge">使用中</span>}
+            <ChevronIcon />
           </button>
         ))}
         <button
@@ -130,21 +170,7 @@ export function ProviderSettings() {
             }}
           />
         )}
-      </aside>
-      {selected !== undefined ? (
-        <ProviderDetail
-          provider={selected}
-          isActive={selected.id === snapshot.activeProviderId}
-          prefs={snapshot.prefs}
-          defaultModel={defaultModel}
-          flash={flash}
-          onActivate={() => void activate(selected.id)}
-          onMakeDefault={(modelId) => void makeDefault(modelId)}
-          onFlash={notify}
-        />
-      ) : (
-        <div className="providersetup__detail provflash">选择左侧供应商查看详情</div>
-      )}
+      </div>
     </div>
   );
 }
@@ -206,7 +232,6 @@ function ProviderDetail({
   prefs,
   defaultModel,
   flash,
-  onActivate,
   onMakeDefault,
   onFlash,
 }: {
@@ -215,7 +240,6 @@ function ProviderDetail({
   prefs: { thinking: 'enabled' | 'disabled'; reasoningEffort: 'off' | 'high' | 'max' };
   defaultModel: string;
   flash: string;
-  onActivate(): void;
   onMakeDefault(modelId: string): void;
   onFlash(text: string): void;
 }) {
@@ -297,54 +321,45 @@ function ProviderDetail({
 
   return (
     <div className="providersetup__detail">
-      {/* 名称 + 地址 + 激活 */}
+      {/* 名称 + 地址 */}
       <section className="settingscard provcard">
-        <div className="provcard__head">
-          <div className="provcard__title-wrap">
+        <div className="provcard__title-wrap">
+          <input
+            type="text"
+            className="provcard__name"
+            value={nameInput ?? provider.name}
+            onChange={(event) => setNameInput(event.target.value)}
+            onBlur={() => void commitMeta()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void commitMeta();
+            }}
+            spellCheck={false}
+          />
+          <div className="provcard__base-row">
             <input
               type="text"
-              className="provcard__name"
-              value={nameInput ?? provider.name}
-              onChange={(event) => setNameInput(event.target.value)}
+              className="provcard__base"
+              placeholder="API 地址（OpenAI 兼容，如 https://api.deepseek.com）"
+              value={baseInput ?? provider.baseURL}
+              onChange={(event) => setBaseInput(event.target.value)}
               onBlur={() => void commitMeta()}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') void commitMeta();
               }}
               spellCheck={false}
             />
-            <div className="provcard__base-row">
-              <input
-                type="text"
-                className="provcard__base"
-                placeholder="API 地址（OpenAI 兼容，如 https://api.deepseek.com）"
-                value={baseInput ?? provider.baseURL}
-                onChange={(event) => setBaseInput(event.target.value)}
-                onBlur={() => void commitMeta()}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') void commitMeta();
-                }}
-                spellCheck={false}
-              />
-              {provider.website !== undefined && (
-                <button
-                  type="button"
-                  className="provlink"
-                  onClick={() =>
-                    void requireBridge().app.openExternal(provider.website ?? '').catch(() => undefined)
-                  }
-                >
-                  获取密钥 ↗
-                </button>
-              )}
-            </div>
+            {provider.website !== undefined && (
+              <button
+                type="button"
+                className="provlink"
+                onClick={() =>
+                  void requireBridge().app.openExternal(provider.website ?? '').catch(() => undefined)
+                }
+              >
+                获取密钥 ↗
+              </button>
+            )}
           </div>
-          {isActive ? (
-            <span className="provbadge provbadge--active">使用中</span>
-          ) : (
-            <button type="button" className="provbtn provbtn--primary" onClick={onActivate}>
-              使用
-            </button>
-          )}
         </div>
         <div className="provcard__desc">
           OpenAI 兼容端点（baseURL + /chat/completions 直连）；配置变更热生效，无需重启。
@@ -555,6 +570,22 @@ function ProviderDetail({
 }
 
 /* ──────────────────────────── 图标 ──────────────────────────── */
+
+function ChevronIcon() {
+  return (
+    <svg className="provrow__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M9.5 5.5 16 12l-6.5 6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M14.5 5.5 8 12l6.5 6.5" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 function EyeIcon() {
   return (

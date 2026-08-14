@@ -2859,28 +2859,70 @@ summary:focus-visible {
   margin-right: auto;
 }
 
-/* ---- 模型服务（多供应商 / 多 Key，Cherry 式双栏） ---- */
+/* ---- 模型服务（两级页面：供应商列表 / 供应商配置） ----
+ * 列表页与配置页各自独立纵向滚动（settingspage__body 滚动容器内单列），
+ * 不再有双栏对齐/联动滚动问题。 */
 
 .providersetup {
   display: flex;
-  gap: 16px;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
 }
 
 .providersetup__list {
-  width: 240px;
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
 .providersetup__detail {
-  flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* 配置页头：返回 + 供应商名 + 使用中/使用 */
+
+.provdetail__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.provback {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--fill-active);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.13s ease,
+    color 0.13s ease;
+}
+
+.provback:hover {
+  background: var(--fill-hover);
+  color: var(--fg);
+}
+
+.provdetail__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .provrow {
@@ -2903,6 +2945,16 @@ summary:focus-visible {
 
 .provrow:hover {
   background: var(--fill-hover);
+}
+
+/* 列表页行：hover/进入提示的右箭头 */
+.provrow__chevron {
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.providersetup > .settingspage__title {
+  margin-bottom: 2px;
 }
 
 .provrow--active {
@@ -3051,17 +3103,22 @@ summary:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding: 12px 0;
 }
 
-.provcard__head {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
+/* 卡片直接子行的统一水平内边距，与 .settings-row 的 18px 基线对齐
+ * （settings-row 自带 padding，不在此列）。 */
+.provcard__title-wrap,
+.provcard__section-title,
+.provkey__row,
+.provkey__list,
+.provmodels,
+.provcard > .provcard__desc {
+  padding-left: 18px;
+  padding-right: 18px;
 }
 
 .provcard__title-wrap {
-  flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -3141,7 +3198,7 @@ summary:focus-visible {
 }
 
 .provcard__desc--standalone {
-  padding: 4px 0;
+  padding: 4px 18px;
 }
 
 .provcard__section-title {

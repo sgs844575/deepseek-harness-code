@@ -104,12 +104,18 @@ export function SettingsView({ onClose, initialSection = 'general' }: SettingsVi
         </div>
       </nav>
       <div className="settingspage__body">
-        <h1 className="settingspage__title">{SECTION_TITLES[section]}</h1>
-        {section === 'general' && <GeneralSection />}
-        {section === 'appearance' && <AppearanceSection />}
-        {section === 'model' && <ProviderSettings />}
-        {section === 'behavior' && <BehaviorSection />}
-        {section === 'data' && <DataSection />}
+        {section === 'model' ? (
+          // 模型服务为两级页面（供应商列表 / 供应商配置），自带各自的页头标题。
+          <ProviderSettings />
+        ) : (
+          <>
+            <h1 className="settingspage__title">{SECTION_TITLES[section]}</h1>
+            {section === 'general' && <GeneralSection />}
+            {section === 'appearance' && <AppearanceSection />}
+            {section === 'behavior' && <BehaviorSection />}
+            {section === 'data' && <DataSection />}
+          </>
+        )}
       </div>
     </div>
   );
