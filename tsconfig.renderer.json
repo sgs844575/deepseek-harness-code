@@ -5,6 +5,8 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ES2022",
     "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
     "rootDir": "src",
     "outDir": "out",
     "strict": true,
@@ -14,7 +16,8 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "sourceMap": true,
-    "declaration": true
+    "declaration": true,
+    "noEmit": true
   },
-  "include": ["src/renderer/**/*", "src/shared/bridge.d.ts"]
+  "include": ["src/renderer/**/*", "src/shared/bridge.d.ts", "src/shared/protocol.ts"]
 }

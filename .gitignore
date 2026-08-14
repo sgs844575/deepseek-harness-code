@@ -4,12 +4,20 @@ node_modules/
 # Build output
 dist/
 out/
+.vite/
 release/
 *.tsbuildinfo
+
+# 自写 harness 插件的编译产物（源码在 src/harness-plugins，保留 package.json）
+config/harness/plugins/*
+!config/harness/plugins/package.json
 
 # IDE
 .idea/
 .vscode/
+
+# 本地 agent 会话目录
+.zcode/
 
 # Logs & OS
 *.log

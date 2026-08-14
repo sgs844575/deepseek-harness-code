@@ -7,16 +7,105 @@ export const channels = {
   app: {
     getVersion: 'app:get-version',
     quit: 'app:quit',
+    /** 重启应用（设置中“重启后生效”类项使用）。 */
+    relaunch: 'app:relaunch',
+    /** 导出文本文件：弹出系统保存对话框后落盘（会话导出 Markdown）。 */
+    exportText: 'app:export-text',
+    /** 选择文件夹（创建项目时选源目录）。 */
+    pickFolder: 'app:pick-folder',
+    /** 用系统默认浏览器打开外部链接（仅 https）。 */
+    openExternal: 'app:open-external',
   },
   window: {
     minimize: 'window:minimize',
     toggleMaximize: 'window:toggle-maximize',
     close: 'window:close',
+    isMaximized: 'window:is-maximized',
+    /** 主进程 → 渲染层：最大化状态变化推送（无边框窗口自定义按钮用）。 */
+    maximizeChanged: 'window:maximize-changed',
+  },
+  host: {
+    getStatus: 'host:get-status',
+    /** 主进程 → 渲染层的状态推送。 */
+    statusChanged: 'host:status-changed',
+    /** 切换工作区（项目）：harness 停机 → 改 DSH_CWD → 重新 boot。 */
+    switchWorkspace: 'host:switch-workspace',
+  },
+  models: {
+    list: 'models:list',
+  },
+  session: {
+    create: 'session:create',
+    open: 'session:open',
+    list: 'session:list',
+    history: 'session:history',
+    prompt: 'session:prompt',
+    cancel: 'session:cancel',
+    /** 主进程 → 渲染层的事件流推送（统一信封）。 */
+    event: 'session:event',
+  },
+  interaction: {
+    respondApproval: 'interaction:respond-approval',
+    respondQuestion: 'interaction:respond-question',
+  },
+  settings: {
+    getDefaultModel: 'settings:get-default-model',
+    setDefaultModel: 'settings:set-default-model',
+  },
+  providers: {
+    /** 完整快照（供应商列表 / 激活项 / 思考偏好）。 */
+    getAll: 'providers:get-all',
+    /** 新增或编辑供应商（自定义或改预设实例的名称/地址）。 */
+    upsert: 'providers:upsert',
+    /** 删除供应商（预设实例可重建，激活项不可删）。 */
+    remove: 'providers:remove',
+    /** 追加 API Key（逗号分隔多 key 批量添加，Cherry Studio 风格）。 */
+    addApiKey: 'providers:add-api-key',
+    /** 更新 Key 标签 / 启停。 */
+    updateApiKey: 'providers:update-api-key',
+    deleteApiKey: 'providers:delete-api-key',
+    /** 从供应商 API 拉取模型目录（GET {baseURL}/models）并保存。 */
+    fetchModels: 'providers:fetch-models',
+    /** 手动添加 / 移除模型。 */
+    addModel: 'providers:add-model',
+    removeModel: 'providers:remove-model',
+    /** 激活供应商（推送到 harness：baseURL / 模型目录 / 轮询密钥）。 */
+    activate: 'providers:activate',
+    /** 选择模型：跨供应商时先激活对应供应商，再设为默认模型。 */
+    selectModel: 'providers:select-model',
+    /** 更新思考偏好（thinking / reasoningEffort）。 */
+    updatePrefs: 'providers:update-prefs',
+    /** 主进程 → 渲染层：快照变更推送。 */
+    changed: 'providers:changed',
+  },
+  appSettings: {
+    getAll: 'app-settings:get-all',
+    update: 'app-settings:update',
+    /** 选择新数据根目录：复制现有 DSH 数据并保存（重启生效）。 */
+    pickDataPath: 'app-settings:pick-data-path',
+    /** 主进程 → 渲染层：设置变更推送。 */
+    changed: 'app-settings:changed',
   },
 } as const;
 
 export type AppChannel = (typeof channels.app)[keyof typeof channels.app];
 export type WindowChannel = (typeof channels.window)[keyof typeof channels.window];
+export type HostChannel = (typeof channels.host)[keyof typeof channels.host];
+export type ModelsChannel = (typeof channels.models)[keyof typeof channels.models];
+export type SessionChannel = (typeof channels.session)[keyof typeof channels.session];
+export type InteractionChannel = (typeof channels.interaction)[keyof typeof channels.interaction];
+export type SettingsChannel = (typeof channels.settings)[keyof typeof channels.settings];
+export type ProviderChannel = (typeof channels.providers)[keyof typeof channels.providers];
+export type AppSettingsChannel = (typeof channels.appSettings)[keyof typeof channels.appSettings];
 
 /** 全部合法通道的字面量联合，供校验使用。 */
-export type IpcChannel = AppChannel | WindowChannel;
+export type IpcChannel =
+  | AppChannel
+  | WindowChannel
+  | HostChannel
+  | ModelsChannel
+  | SessionChannel
+  | InteractionChannel
+  | SettingsChannel
+  | ProviderChannel
+  | AppSettingsChannel;

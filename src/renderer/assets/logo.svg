@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-label="DeepSeek Harness Code">
+  <defs>
+    <linearGradient id="logo-bg" x1="12" y1="8" x2="116" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4d7cff"/>
+      <stop offset="0.55" stop-color="#0a84ff"/>
+      <stop offset="1" stop-color="#0b49c8"/>
+    </linearGradient>
+    <radialGradient id="logo-glow" cx="0.3" cy="0.22" r="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="0.65" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="logo-spark" x1="56" y1="22" x2="72" y2="38" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b8ecff"/>
+      <stop offset="1" stop-color="#4facfe"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="30" fill="url(#logo-bg)"/>
+  <rect x="4" y="4" width="120" height="120" rx="30" fill="url(#logo-glow)"/>
+  <rect x="4.75" y="4.75" width="118.5" height="118.5" rx="29.25" stroke="#ffffff" stroke-opacity="0.25" stroke-width="1.5"/>
+  <circle cx="64" cy="64" r="34" stroke="#ffffff" stroke-opacity="0.88" stroke-width="6" stroke-linecap="round"/>
+  <g stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M56 51 44 64l12 13"/>
+    <path d="M72 51l12 13-12 13"/>
+  </g>
+  <g transform="rotate(45 64 64)">
+    <circle cx="64" cy="30" r="11" fill="#4facfe" fill-opacity="0.35"/>
+    <circle cx="64" cy="30" r="7.5" fill="url(#logo-spark)" stroke="#ffffff" stroke-width="2"/>
+  </g>
+</svg>

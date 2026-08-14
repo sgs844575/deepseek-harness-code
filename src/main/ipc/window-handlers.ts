@@ -25,6 +25,10 @@ export function registerWindowHandlers(): void {
     }
   });
 
+  ipcMain.handle(channels.window.isMaximized, (event) => {
+    return windowFromEvent(event)?.isMaximized() ?? false;
+  });
+
   ipcMain.handle(channels.window.close, (event) => {
     windowFromEvent(event)?.close();
   });

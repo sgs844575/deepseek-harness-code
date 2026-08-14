@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <!-- CSP 由 vite.renderer.config.ts 按环境注入（@@CSP@@ 占位符） -->
+  <meta http-equiv="Content-Security-Policy" content="@@CSP@@" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeepSeek Harness Code</title>
+  <!-- 启动引导页样式：渲染阻塞加载，JS 未就绪时先显示 Logo 动画 -->
+  <link rel="stylesheet" href="/src/renderer/styles/boot-splash.css" />
+</head>
+<body>
+  <!-- React createRoot().render() 首帧会整体替换 #root 内容，此引导页随之消失 -->
+  <div id="root">
+    <div class="boot-splash">
+      <svg class="boot-splash__logo" width="96" height="96" viewBox="0 0 128 128" fill="none" role="img" aria-label="DeepSeek Harness Code">
+        <defs>
+          <linearGradient id="boot-bg" x1="12" y1="8" x2="116" y2="120" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#4d7cff"/>
+            <stop offset="0.55" stop-color="#0a84ff"/>
+            <stop offset="1" stop-color="#0b49c8"/>
+          </linearGradient>
+          <radialGradient id="boot-glow" cx="0.3" cy="0.22" r="1">
+            <stop offset="0" stop-color="#ffffff" stop-opacity="0.30"/>
+            <stop offset="0.65" stop-color="#ffffff" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="boot-spark" x1="56" y1="22" x2="72" y2="38" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#b8ecff"/>
+            <stop offset="1" stop-color="#4facfe"/>
+          </linearGradient>
+        </defs>
+        <rect x="4" y="4" width="120" height="120" rx="30" fill="url(#boot-bg)"/>
+        <rect x="4" y="4" width="120" height="120" rx="30" fill="url(#boot-glow)"/>
+        <rect x="4.75" y="4.75" width="118.5" height="118.5" rx="29.25" stroke="#ffffff" stroke-opacity="0.25" stroke-width="1.5"/>
+        <circle cx="64" cy="64" r="34" stroke="#ffffff" stroke-opacity="0.88" stroke-width="6" stroke-linecap="round"/>
+        <g class="boot-logo__chevrons" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M56 51 44 64l12 13"/>
+          <path d="M72 51l12 13-12 13"/>
+        </g>
+        <g class="boot-logo__orbit">
+          <circle cx="64" cy="30" r="11" fill="#4facfe" fill-opacity="0.35"/>
+          <circle cx="64" cy="30" r="7.5" fill="url(#boot-spark)" stroke="#ffffff" stroke-width="2"/>
+        </g>
+      </svg>
+      <div class="boot-splash__name">DeepSeek Harness Code</div>
+      <div class="boot-splash__status">正在加载…</div>
+    </div>
+  </div>
+  <script type="module" src="/src/renderer/main.tsx"></script>
+</body>
+</html>

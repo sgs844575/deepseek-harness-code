@@ -1,0 +1,7 @@
+/**
+ * 托盘图标：32x32 PNG（蓝色 squircle + 白色尖括号）内嵌 base64，
+ * 避免主进程产物携带二进制资源（nativeImage 不支持 SVG）。
+ * 图形由一次性脚本生成，需更换时重新生成并替换此常量即可。
+ */
+export const TRAY_ICON_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA0UlEQVR4nGNgwAO4Wv7/pwbGZwfNLCXLMbS2HK8j6GU5VkfQ23IMR4xsBwyU5XBHDCkHqE76///kEwgGsQmJU90BIAtgIGYtQhzEhgGQGpo4YO01hCVPPmKGAEgMBkBqqeqA8t3/UYDDfEw1IDFkANJDFQcgBy960FOiligHoAftpBOEDQSpwRVVJDsAOdGREq/I6YVQohzcDhjwKBjwRAjDA5oNscUr3QsibImS7kUx12CojGiBB94BA94kG3XAoOiYDIquGb0cgddyWjkGnx0ACTXyoGDSr34AAAAASUVORK5CYII=';

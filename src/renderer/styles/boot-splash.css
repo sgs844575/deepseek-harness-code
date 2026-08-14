@@ -1,0 +1,90 @@
+/* ══════════════════════════ 应用启动引导页（pre-JS） ══════════════════════════
+ * 在 index.html 里静态引入：HTML 一解析、JS 未加载时立刻显示带动画的 Logo，
+ * React 挂载后 #root 内容被整体替换，本样式随之失效。
+ * 必须完全自包含（不依赖 main.css 的 token），并兼容严格 CSP（同源 link）。 */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+html {
+  background: #070911;
+}
+
+body {
+  /* 与 main.css 深色壁纸一致，保证 JS 接管前后背景无缝 */
+  background-color: #070911;
+  background-image:
+    radial-gradient(1200px 800px at 85% -10%, rgba(58, 94, 224, 0.3), transparent 62%),
+    radial-gradient(900px 700px at -10% 35%, rgba(122, 60, 200, 0.22), transparent 60%),
+    radial-gradient(1000px 900px at 50% 125%, rgba(18, 128, 158, 0.18), transparent 62%),
+    linear-gradient(180deg, #0b0e19, #070911);
+  background-attachment: fixed;
+  color: #f5f5f7;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Segoe UI',
+    'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.boot-splash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.boot-splash__logo {
+  display: block;
+}
+
+.boot-splash__name {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #f5f5f7;
+}
+
+.boot-splash__status {
+  font-size: 12.5px;
+  color: rgba(235, 235, 245, 0.62);
+}
+
+/* 加载动画：火花沿轨道环公转、尖括号呼吸（与 Splash 组件同节奏） */
+.boot-logo__orbit {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: boot-orbit 1.8s linear infinite;
+}
+
+@keyframes boot-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.boot-logo__chevrons {
+  animation: boot-breathe 2.2s ease-in-out infinite;
+}
+
+@keyframes boot-breathe {
+  0%,
+  100% {
+    opacity: 0.95;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-logo__orbit,
+  .boot-logo__chevrons {
+    animation: none;
+  }
+}

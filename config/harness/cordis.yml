@@ -1,0 +1,152 @@
+# DeepSeek Harness Code —— 客户端 agent 组合（Windows 最小 zcode 级配置）
+#
+# 集成方式：Electron 主进程直接调用 @deepseek-ai/dsh-app-boot 的 boot()，
+# 以本文件为配置入口。所有官方插件用相对路径直连 deepseek-harness 仓库的
+# 构建产物（lib/index.js），绕过包管理器解析；我们自己的插件放在
+# ./plugins/ 下（相对路径同样基于本文件所在目录）。
+#
+# 平台说明：Windows 下 shell 工具走 pwsh（toolBash: false 关闭 bash 行）；
+# subprocess 服务由自写的 subprocess-child 提供（child_process 实现，
+# 不加载 node-pty，规避 Electron 原生 ABI 不匹配）。
+
+- id: settings
+  name: '../../deepseek-harness/packages/settings/settings-file/lib/index.js'
+
+- id: credentials
+  name: '../../deepseek-harness/packages/credentials/credentials-local/lib/index.js'
+
+- id: agent-default-model
+  name: '../../deepseek-harness/packages/core/agent-default-model/lib/index.js'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash
+
+- id: llm-deepseek
+  name: '../../deepseek-harness/packages/llm/llm-deepseek/lib/index.js'
+  config:
+    apiKeyEnv: DEEPSEEK_API_KEY
+
+# 自写插件：child_process 版 SubprocessRuntime（替代 dsh-subprocess-local）
+- id: subprocess
+  name: './plugins/subprocess-child/index.js'
+
+- id: pwsh
+  name: '../../deepseek-harness/packages/shell/pwsh-local/lib/index.js'
+
+- id: shell-env
+  name: '../../deepseek-harness/packages/shell/shell-env/lib/index.js'
+
+# agent 主干：内部挂载 llm / session / tools / agent / agent-loop / 系统
+# 提示词装配 / 会话标题 / llm-retry / invariants 等子插件。
+- id: agent-spine
+  name: '../../deepseek-harness/packages/examples/agent-spine-demo/lib/index.js'
+  config:
+    persona: >-
+      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+    workspaceContext:
+      maxBytes: 65536
+    skills:
+      enabled: false
+    toolBash: false
+    toolJobs: false
+    goals: false
+
+- id: tool-pwsh
+  name: '../../deepseek-harness/packages/shell/tool-pwsh/lib/index.js'
+
+- id: fs-local
+  name: '../../deepseek-harness/packages/fs/fs-local/lib/index.js'
+  config:
+    cwd: !!js process.env.DSH_CWD ?? process.cwd()
+
+- id: fs-observation-policy
+  name: '../../deepseek-harness/packages/fs/fs-observation-policy/lib/index.js'
+
+- id: tool-fs
+  name: '../../deepseek-harness/packages/fs/tool-fs/lib/index.js'
+
+- id: tool-fs-search
+  name: '../../deepseek-harness/packages/fs/tool-fs-search/lib/index.js'
+  config:
+    sampleOverCapGlobResults: false
+
+- id: str-replace-editor
+  name: '../../deepseek-harness/packages/fs/tool-str-replace-editor/lib/index.js'
+  config:
+    maxOutputChars: 16000
+
+- id: tool-todo
+  name: '../../deepseek-harness/packages/todo/tool-todo/lib/index.js'
+  config:
+    allowParallelInProgress: true
+
+# 人机协作面：工具审批 + 向用户提问 + 计划模式
+- id: approval
+  name: '../../deepseek-harness/packages/interaction/user-approval/lib/index.js'
+
+- id: user-questions
+  name: '../../deepseek-harness/packages/interaction/user-questions/lib/index.js'
+
+- id: tool-ask-user
+  name: '../../deepseek-harness/packages/interaction/tool-ask-user/lib/index.js'
+
+# harness 原生计划模式：激活时每个请求附带 plan:policy 系统提示段，
+# exit_plan_mode 工具把完成的计划提交用户审阅；状态经 plan/mode 事件持久化。
+- id: plan-mode
+  name: '../../deepseek-harness/packages/plan/plan-mode/lib/index.js'
+  config:
+    section: >-
+      You are in PLAN MODE. You must not modify anything: file-writing tools and
+      state-changing shell commands are denied in this mode. Restrict yourself
+      to reading, searching and analyzing the codebase, then produce a clear,
+      actionable implementation plan: goals, concrete steps, files to create or
+      change, and risks. When the plan is ready, call the exit_plan_mode tool
+      to present it to the user for review; implementation may begin only after
+      the user approves the plan.
+
+# 守卫与输出治理
+- id: repeat-tool-reminder
+  name: '../../deepseek-harness/packages/guard/repeat-tool-reminder/lib/index.js'
+  config:
+    thresholds: [3, 5, 8]
+    argumentsPreviewChars: 500
+
+- id: timeout-policy
+  name: '../../deepseek-harness/packages/guard/timeout-policy/lib/index.js'
+
+- id: spill-local
+  name: '../../deepseek-harness/packages/spill/spill-local/lib/index.js'
+
+- id: spill-policy
+  name: '../../deepseek-harness/packages/spill/spill-policy/lib/index.js'
+  config:
+    maxInlineBytes: 50000
+
+- id: tool-result-pruner
+  name: '../../deepseek-harness/packages/compaction/compaction-tool-result-pruner/lib/index.js'
+  config:
+    thresholdChars: 8192
+    headChars: 4096
+    tailChars: 1024
+
+- id: token-meter
+  name: '../../deepseek-harness/packages/llm/token-meter/lib/index.js'
+
+- id: compaction-basic
+  name: '../../deepseek-harness/packages/compaction/compaction-basic/lib/index.js'
+  config:
+    thresholdRatio: 0.8
+    retainRatio: 0.16
+    maxTokens: 8192
+    compactionRetries: 1
+
+# 会话持久化：root 固定在 DSH_HOME/sessions（主进程把 DSH_HOME 指到应用
+# userData），compression none 避免引入 zstd 压缩帧（读回走纯 jsonl）。
+- id: sessions
+  name: '../../deepseek-harness/packages/session/session-persistence-jsonl/lib/index.js'
+  config:
+    root: !!js dshHomePath('sessions')
+    compression: none
+
+- id: session-checkpoints
+  name: '../../deepseek-harness/packages/session/session-checkpoint-policy/lib/index.js'
