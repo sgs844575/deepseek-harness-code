@@ -862,30 +862,23 @@ export function Composer({
                 </div>
               </div>
             )}
-            {running && (
-              <button
-                type="button"
-                className="composer__icon-btn composer__icon-btn--stop"
-                title="停止当前任务"
-                onClick={() => void onStop()}
-              >
-                <StopIcon />
-              </button>
-            )}
+            {/* 发送 / 停止合一：运行中即停止键（输入仍可 Enter 发送，行为随「交互行为」设置） */}
             <button
               type="button"
-              className="composer__send"
-              disabled={!canSend}
+              className={`composer__send${running ? ' composer__send--stop' : ''}`}
+              disabled={!running && !canSend}
               title={
                 running
-                  ? runningBehavior === 'steer'
-                    ? '插话（发送给运行中的任务）'
-                    : '加入队列（当前任务结束后执行）'
-                  : '发送'
+                  ? '停止当前任务（输入内容仍可按 Enter 发送）'
+                  : canSend
+                    ? runningBehavior === 'steer'
+                      ? '发送（运行中将插话引导）'
+                      : '发送'
+                    : '输入内容后发送'
               }
-              onClick={submit}
+              onClick={() => (running ? void onStop() : submit())}
             >
-              <ArrowUpIcon />
+              {running ? <StopIcon /> : <ArrowUpIcon />}
             </button>
           </div>
         </div>

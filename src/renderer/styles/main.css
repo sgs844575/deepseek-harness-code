@@ -2428,6 +2428,16 @@ select:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* 发送 / 停止合一：运行中变为停止键（危险色悬停） */
+.composer__send--stop {
+  background: var(--fill-active);
+  color: var(--danger);
+}
+
+.composer__send--stop:hover {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
 /* 工具栏胶囊按钮（模式 / 模型 / 思考强度）与其弹出菜单（向上弹） */
 .composer__pillwrap {
   position: relative;
