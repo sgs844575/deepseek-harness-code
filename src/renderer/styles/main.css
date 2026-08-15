@@ -475,38 +475,38 @@ select:focus-visible {
   color: var(--fg);
 }
 
-/* 主导航：新对话（含 ⊕）/ 已归档 */
+/* 主导航：新对话（行尾内嵌 +）/ 已归档 —— Codex 式，两行完全同构同高 */
 
 .sb-nav {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 4px 8px 2px;
-}
-
-.sb-nav__row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  padding: 6px 8px 4px;
 }
 
 .sb-nav__item {
-  flex: 1;
-  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 30px;
-  padding: 0 8px;
+  gap: 9px;
+  height: 32px;
+  padding: 0 10px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   text-align: left;
   cursor: pointer;
   transition: background 0.12s ease;
+}
+
+.sb-nav__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sb-nav__item svg {
@@ -526,30 +526,24 @@ select:focus-visible {
   color: var(--fg);
 }
 
-.sb-nav__count {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.sb-nav__plus {
-  width: 26px;
-  height: 26px;
+/* 新对话行尾「+」：整行同属一个按钮（Codex New chat +） */
+.sb-nav__trailing {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 50%;
-  background: var(--fill-active);
-  color: var(--fg);
-  cursor: pointer;
-  transition: background 0.12s ease;
+  color: var(--muted);
+  transition: color 0.12s ease;
 }
 
-.sb-nav__plus:hover {
-  background: color-mix(in srgb, var(--accent) 26%, transparent);
+.sb-nav__item:hover .sb-nav__trailing {
+  color: var(--fg);
+}
+
+.sb-nav__count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* 列表主体（滚动区） */

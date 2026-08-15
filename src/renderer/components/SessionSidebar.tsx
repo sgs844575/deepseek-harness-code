@@ -440,17 +440,15 @@ export function SessionSidebar({
         </div>
       )}
 
-      {/* 主导航：新对话 / 已归档 */}
+      {/* 主导航：新对话 / 已归档（Codex 式同行高单行按钮；新对话行尾内嵌 +） */}
       <nav className="sb-nav">
-        <div className="sb-nav__row">
-          <button type="button" className="sb-nav__item" onClick={onCreate}>
-            <NewChatIcon />
-            <span>新对话</span>
-          </button>
-          <button type="button" className="sb-nav__plus" title="新建会话" onClick={onCreate}>
+        <button type="button" className="sb-nav__item" title="新建会话" onClick={onCreate}>
+          <NewChatIcon />
+          <span className="sb-nav__label">新对话</span>
+          <span className="sb-nav__trailing" aria-hidden>
             <PlusIcon />
-          </button>
-        </div>
+          </span>
+        </button>
         <button
           type="button"
           className={`sb-nav__item${view === 'archive' ? ' sb-nav__item--active' : ''}`}
@@ -460,7 +458,7 @@ export function SessionSidebar({
           }}
         >
           <ArchiveIcon />
-          <span>已归档</span>
+          <span className="sb-nav__label">已归档</span>
           {archivedList.length > 0 && (
             <span className="sb-nav__count">{archivedList.length}</span>
           )}
@@ -1086,11 +1084,19 @@ function BellOffIcon() {
   );
 }
 
+/** 新对话（撰写）：方框 + 斜置笔，与「重命名」的裸笔图标区分。 */
 function NewChatIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
-        d="M4.5 19.5l4-1L19.8 7.2a2 2 0 0 0-3-3L5.5 15.5l-1 4Z"
+        d="M19.5 11.2v6.3a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h6.3"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.7 15.3l9.6-9.6a1.85 1.85 0 0 1 2.6 2.6l-9.6 9.6-3.6 1 1-3.6Z"
         stroke="currentColor"
         strokeWidth="1.7"
         strokeLinejoin="round"
@@ -1109,7 +1115,7 @@ function PlusIcon() {
 
 function ArchiveIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M3.5 7h17M4.5 7l1.3-3h12.4L19.5 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M5.5 7v11a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5V7" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
       <path d="M9.8 11.5h4.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
