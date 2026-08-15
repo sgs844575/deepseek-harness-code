@@ -22,6 +22,10 @@ export interface ChatMessage {
   text: string;
   /** 思考过程（reasoning 流）。 */
   reasoning: string;
+  /** 思考开始时间（首个 reasoning 增量的事件时间；落定时换算耗时）。 */
+  reasoningStartMs?: number;
+  /** 思考耗时（ms）：thinking 增量到 assistant/message 落定。 */
+  reasoningDurationMs?: number;
   streaming: boolean;
   usageText: string;
   tools: ToolCallItem[];
@@ -40,10 +44,17 @@ export interface SessionUiState {
   title: string;
   /** 最新任务列表快照（todo/write 为整表替换，last-wins）。 */
   todos: TodoItemUi[];
+  /**
+   * 当前上下文规模（最近一次请求的 inputTokens；压缩后自然回落）。
+   * null = 尚无任何用量数据。输出区圆环 / 详情以此为分子。
+   */
+  contextTokens: number | null;
+  /** 会话运行的 Agent 预设 id（创建 priming 与 agent-preset/selected 事件 last-wins）。 */
+  agentPreset?: string;
 }
 
 export function initialSessionState(): SessionUiState {
-  return { messages: [], running: false, title: '', todos: [] };
+  return { messages: [], running: false, title: '', todos: [], contextTokens: null };
 }
 
 /* ──────────────────────────── 事件 data 的防御性收窄 ──────────────────────────── */
@@ -156,7 +167,15 @@ function appendAssistantPlaceholder(state: SessionUiState, idHint: string): Sess
     ...state,
     messages: [
       ...state.messages,
-      { id: idHint, role: 'assistant', text: '', reasoning: '', streaming: true, usageText: '', tools: [] },
+      {
+        id: idHint,
+        role: 'assistant',
+        text: '',
+        reasoning: '',
+        streaming: true,
+        usageText: '',
+        tools: [],
+      },
     ],
   };
 }
@@ -179,7 +198,9 @@ export function foldEvent(state: SessionUiState, event: SessionEventDto): Sessio
   const data = asRecord(event.data) ?? {};
   switch (event.type) {
     case 'user/message': {
-      const message = data.message as MessageLike | undefined;
+      // harness agent-loop 对 user/message 直接 append(message)：消息字段在
+      // data 根上（content/source/role/id）；兼容包装形态 data.message。
+      const message = (asRecord(data.message) ?? data) as MessageLike | undefined;
       // 只渲染真人输入；插件注入的 runtime-context 快照（source.kind === 'plugin'）跳过。
       if (message?.source?.kind !== 'user') return state;
       const text = blocksText(message);
@@ -217,6 +238,8 @@ export function foldEvent(state: SessionUiState, event: SessionEventDto): Sessio
         return mapLastAssistant(withPlaceholder, (message) => ({
           ...message,
           reasoning: message.reasoning + chunk.text,
+          // 首个思考增量记录起点（落定时换算耗时；回放路径同样适用）。
+          ...(message.reasoning.length === 0 ? { reasoningStartMs: event.time } : {}),
         }));
       }
       return withPlaceholder;
@@ -228,18 +251,36 @@ export function foldEvent(state: SessionUiState, event: SessionEventDto): Sessio
         usage !== undefined
           ? `↑${String(usage.inputTokens ?? 0)} ↓${String(usage.outputTokens ?? 0)} tokens`
           : '';
-      return mapLastAssistant(state, (existing) => ({
-        ...existing,
-        text: blocksText(message) || existing.text,
-        reasoning: blocksReasoning(message) || existing.reasoning,
-        streaming: false,
-        usageText: usageText.length > 0 ? usageText : existing.usageText,
-      }));
+      // 上下文统计：最近一次请求的 prompt 规模即当前上下文占用。
+      const inputTokens =
+        usage !== undefined && Number.isFinite(usage.inputTokens)
+          ? Number(usage.inputTokens)
+          : null;
+      return mapLastAssistant(
+        { ...state, contextTokens: inputTokens ?? state.contextTokens },
+        (existing) => ({
+          ...existing,
+          text: blocksText(message) || existing.text,
+          reasoning: blocksReasoning(message) || existing.reasoning,
+          streaming: false,
+          usageText: usageText.length > 0 ? usageText : existing.usageText,
+          // 思考耗时：从首个思考增量到消息落定（无思考则清空）。
+          ...(existing.reasoning.length > 0 && existing.reasoningStartMs !== undefined
+            ? { reasoningDurationMs: Math.max(0, event.time - existing.reasoningStartMs) }
+            : {}),
+        }),
+      );
     }
     case 'session/title': {
       const title = typeof data.title === 'string' ? data.title : '';
       if (title.length === 0) return state;
       return { ...state, title };
+    }
+    case 'agent-preset/selected': {
+      // 空白期切换预设（recompose 提交后追加）：last-wins，实时流与回放同路。
+      const preset = typeof data.agentPreset === 'string' ? data.agentPreset : '';
+      if (preset.length === 0) return state;
+      return { ...state, agentPreset: preset };
     }
     case 'todo/write': {
       // harness 语义：每次携带完整替换列表（whole-value），折叠为 last-wins 快照。

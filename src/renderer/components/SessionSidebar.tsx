@@ -29,6 +29,8 @@ export interface SessionSidebarProps {
   onCreate(): void;
   onRename(sessionId: string, name: string): void;
   onExport(sessionId: string): void;
+  /** 派生会话（fork）：以该会话已完成回合为种子创建新会话。 */
+  onFork(sessionId: string): void;
   /** 切换项目（工作区）：harness 停机重启到新 cwd。 */
   onSwitchProject(cwd: string): void;
   /** 打开设置页；可指定定位分区（账户菜单「API Key」→ 模型与凭据）。 */
@@ -62,6 +64,7 @@ export function SessionSidebar({
   onCreate,
   onRename,
   onExport,
+  onFork,
   onSwitchProject,
   onOpenSettings,
 }: SessionSidebarProps) {
@@ -342,6 +345,7 @@ export function SessionSidebar({
       }}
       onCancelEdit={() => setEditingId(null)}
       onExport={() => onExport(session.id)}
+      onFork={() => onFork(session.id)}
       onArchive={() => archiveSessions([session.id])}
     />
   );
@@ -833,10 +837,11 @@ interface SessionRowProps {
   onCommitEdit(name: string): void;
   onCancelEdit(): void;
   onExport(): void;
+  onFork(): void;
   onArchive(): void;
 }
 
-/** 会话行：单行标题 + 右侧时间；悬停/选中时时间让位给 重命名/导出/归档 三个操作。 */
+/** 会话行：单行标题 + 右侧时间；悬停/选中时时间让位给 重命名/派生/导出/归档 操作。 */
 function SessionRow({
   session,
   title,
@@ -847,6 +852,7 @@ function SessionRow({
   onCommitEdit,
   onCancelEdit,
   onExport,
+  onFork,
   onArchive,
 }: SessionRowProps) {
   if (isEditing) {
@@ -871,6 +877,14 @@ function SessionRow({
       <div className="sb-item__actions">
         <button type="button" className="sb-item__action" title="重命名（本地别名）" onClick={onStartEdit}>
           <PencilIcon />
+        </button>
+        <button
+          type="button"
+          className="sb-item__action"
+          title="派生会话（复制到最近一个已完成回合，从那里继续）"
+          onClick={onFork}
+        >
+          <ForkIcon />
         </button>
         <button type="button" className="sb-item__action" title="导出为 Markdown" onClick={onExport}>
           <DownloadIcon />
@@ -1144,6 +1158,23 @@ function PencilIcon() {
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** 派生会话：一分二的两条支线。 */
+function ForkIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="7" cy="5.5" r="2.2" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="17" cy="5.5" r="2.2" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="12" cy="18.5" r="2.2" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M7 7.7c0 4 1.5 6.3 4 8M17 7.7c0 4-1.5 6.3-4 8M7 7.7V11M17 7.7V11"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
       />
     </svg>
   );
