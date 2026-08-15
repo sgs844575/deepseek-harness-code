@@ -759,14 +759,14 @@ select:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* 行操作按钮在行的常规流内（非绝对定位盖叠）：悬停显示时标题收缩出
+ * 省略号让位，长标题不再被按钮压住；时间（meta）悬停时隐藏减密度。 */
 .sb-item__actions {
-  position: absolute;
-  right: 3px;
-  top: 0;
-  bottom: 0;
   display: none;
+  flex-shrink: 0;
   align-items: center;
   gap: 1px;
+  margin-right: 2px;
 }
 
 .sb-item:hover .sb-item__actions,
