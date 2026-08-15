@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { SubagentRunDto } from '../../shared/protocol.js';
 import type { ChatMessage, SessionUiState, ToolCallItem } from '../state/sessionStore';
 import { renderMarkdown } from '../markdown/render';
@@ -40,12 +41,38 @@ export function groupRounds(messages: ChatMessage[]): ChatRound[] {
   return rounds;
 }
 
+/** 空会话建议卡（Codex 式欢迎页）：点击把提示词填入输入框。 */
+const EMPTY_SUGGESTIONS: { icon: ReactNode; label: string; prompt: string }[] = [
+  {
+    icon: <SuggestProjectIcon />,
+    label: '解读这个项目',
+    prompt: '浏览当前项目的目录结构与入口文件，总结它的用途、技术栈和运行方式。',
+  },
+  {
+    icon: <SuggestBugIcon />,
+    label: '查找并修复 Bug',
+    prompt: '帮我排查最近一次改动引入的问题：先定位根因，说明结论后再动手修复。',
+  },
+  {
+    icon: <SuggestTestIcon />,
+    label: '补单元测试',
+    prompt: '为核心模块补充单元测试：先阅读现有测试的写法，保持风格一致，跑通后再总结覆盖点。',
+  },
+  {
+    icon: <SuggestReviewIcon />,
+    label: '审查当前改动',
+    prompt: '审查工作区当前的未提交改动（git diff），指出风险点并给出改进建议。',
+  },
+];
+
 export function ChatView({
   state,
   hostReady,
   showThinking,
   subagents = [],
   childStates = {},
+  workspaceName = '',
+  onPickSuggestion,
 }: {
   state: SessionUiState;
   hostReady: boolean;
@@ -54,6 +81,10 @@ export function ChatView({
   subagents?: SubagentRunDto[];
   /** 全部会话状态桶（子代理 transcript 以 childSessionId 读取）。 */
   childStates?: Record<string, SessionUiState>;
+  /** 当前工作区目录名（欢迎页展示）。 */
+  workspaceName?: string;
+  /** 点击欢迎页建议卡：把提示词注入输入框。 */
+  onPickSuggestion?(prompt: string): void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -67,8 +98,38 @@ export function ChatView({
     <div className="chat">
       <div className="chat__scroll">
         {state.messages.length === 0 && (
-          <div className="chat__empty">
-            {hostReady ? '向 DeepSeek agent 提问，开始你的第一轮任务。' : '正在连接 harness…'}
+          <div className="chat__welcome">
+            {hostReady ? (
+              <>
+                <div className="chat__welcome-mark" aria-hidden>
+                  <LogoGlyph />
+                </div>
+                <h1 className="chat__welcome-title">有什么可以帮忙的？</h1>
+                <p className="chat__welcome-sub">
+                  {workspaceName.length > 0
+                    ? `DeepSeek agent 将在项目「${workspaceName}」中读取文件、编辑代码并执行命令`
+                    : 'DeepSeek agent 会读取文件、编辑代码并执行命令，描述任务即可开始'}
+                </p>
+                <div className="chat__welcome-grid">
+                  {EMPTY_SUGGESTIONS.map((suggestion) => (
+                    <button
+                      type="button"
+                      key={suggestion.label}
+                      className="chat__welcome-card"
+                      onClick={() => onPickSuggestion?.(suggestion.prompt)}
+                    >
+                      <span className="chat__welcome-card-icon" aria-hidden>
+                        {suggestion.icon}
+                      </span>
+                      <span className="chat__welcome-card-label">{suggestion.label}</span>
+                      <span className="chat__welcome-card-hint">{suggestion.prompt}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="chat__welcome-sub">正在连接 harness…</p>
+            )}
           </div>
         )}
         {rounds.map((round, index) => (
@@ -368,6 +429,73 @@ function DiffBlock({ diff }: { diff: EditDiffView }) {
 }
 
 /* ---- 内联 SVG 图标 ---- */
+
+/** 欢迎页 Logo 记号（与启动页同语言：圆环 + 双尖角）。 */
+function LogoGlyph() {
+  return (
+    <svg width="44" height="44" viewBox="0 0 128 128" fill="none" aria-hidden>
+      <defs>
+        <linearGradient id="chat-welcome-grad" x1="12" y1="8" x2="116" y2="120" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#4d7cff" />
+          <stop offset="1" stop-color="#0b49c8" />
+        </linearGradient>
+      </defs>
+      <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#chat-welcome-grad)" />
+      <circle cx="64" cy="64" r="32" stroke="#ffffff" stroke-opacity="0.9" stroke-width="6" stroke-linecap="round" />
+      <g stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M56 51 44 64l12 13" />
+        <path d="M72 51l12 13-12 13" />
+      </g>
+    </svg>
+  );
+}
+
+/** 建议卡图标（线性，与整体图标语言一致）。 */
+function SuggestProjectIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.2h7a2 2 0 0 1 2 2v8.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-11Z"
+        stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"
+      />
+      <path d="M7 14.5h7M7 17.5h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SuggestBugIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="8" y="7.5" width="8" height="10" rx="4" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M8.2 9.5 5.5 7.6M15.8 9.5l2.7-1.9M8.2 15.5 5.5 17.4M15.8 15.5l2.7 1.9M12 7.5V5M9 5.5 8 4M15 5.5 16 4"
+        stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function SuggestTestIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4.5 6.5l1.8 1.8 3.2-3.3M4.5 16.5l1.8 1.8 3.2-3.3"
+        stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"
+      />
+      <path d="M12.5 7H20M12.5 17.2H20" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SuggestReviewIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M15.6 15.6L20.5 20.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M8.5 11h5M11 8.5v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 /** 思考图标（大脑轮廓，Cherry Studio 同款意象）。 */
 function BrainIcon() {

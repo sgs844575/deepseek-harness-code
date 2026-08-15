@@ -55,6 +55,8 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
   const [states, setStates] = useState<Record<string, SessionUiState>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [host, setHost] = useState<HostStateDto | null>(null);
+  /** 外部注入输入框的草稿（欢迎页建议卡）：token 推进时覆写并聚焦。 */
+  const [injectedDraft, setInjectedDraft] = useState<{ text: string; token: number }>({ text: '', token: 0 });
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -511,6 +513,10 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
               showThinking={settings.showThinking}
               subagents={activeSubagents}
               childStates={states}
+              workspaceName={baseName(host?.workspace ?? '')}
+              onPickSuggestion={(prompt) =>
+                setInjectedDraft((previous) => ({ text: prompt, token: previous.token + 1 }))
+              }
             />
             {pendingApproval !== null && (
               <ApprovalCard approval={pendingApproval} onRespond={(id, outcome) => void handleApproval(id, outcome)} />
@@ -537,6 +543,7 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
               onOpenSettings={onOpenSettings}
               onSend={handleSend}
               onStop={handleStop}
+              injectedDraft={injectedDraft}
               onNewSession={() => void createSession()}
               onExportSession={() => {
                 if (activeId !== null) void handleExport(activeId);
@@ -557,4 +564,10 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
       </div>
     </div>
   );
+}
+
+/** 取路径最后一段做展示名；空串原样返回。 */
+function baseName(path: string): string {
+  const parts = path.split(/[\\/]/).filter((part) => part.length > 0);
+  return parts.length > 0 ? (parts[parts.length - 1] ?? '') : '';
 }

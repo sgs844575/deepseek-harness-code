@@ -1414,6 +1414,96 @@ select:focus-visible {
   padding: 56px 0;
 }
 
+/* ---- 空会话欢迎页（Codex 式）：问候 + 项目提示 + 建议卡 ---- */
+
+.chat__welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: clamp(28px, 9vh, 88px) 12px 32px;
+}
+
+.chat__welcome-mark {
+  display: inline-flex;
+  margin-bottom: 18px;
+  filter: drop-shadow(0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent));
+}
+
+.chat__welcome-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  color: var(--fg);
+}
+
+.chat__welcome-sub {
+  margin: 10px 0 0;
+  max-width: 460px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.chat__welcome-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(200px, 248px));
+  gap: 10px;
+  margin-top: 26px;
+}
+
+@media (max-width: 640px) {
+  .chat__welcome-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 建议卡：图标 + 标题一行，提示词两行截断；hover 抬升描边 */
+.chat__welcome-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease,
+    transform 0.14s ease;
+}
+
+.chat__welcome-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--glass-bg-strong);
+  transform: translateY(-1px);
+}
+
+.chat__welcome-card-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.chat__welcome-card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.chat__welcome-card-hint {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--faint);
+}
+
 /* ---- 回合分组：一条用户消息 = 一轮锚点，其后所有助手产出归属该轮 ---- */
 
 .round {

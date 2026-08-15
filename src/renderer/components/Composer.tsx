@@ -49,6 +49,11 @@ export interface ComposerProps {
   onStop(): void | Promise<void>;
   onNewSession(): void;
   onExportSession(): void;
+  /**
+   * 外部注入草稿（欢迎页建议卡）：token 变化时覆写输入框并聚焦。
+   * 与用户键入互不干扰——仅 token 推进才覆写。
+   */
+  injectedDraft?: { text: string; token: number };
   /** 派生当前会话（/派生 命令）。 */
   onForkSession(): void;
   /** 归档当前会话（/归档 命令；侧栏「已归档」可恢复）。 */
@@ -131,6 +136,7 @@ export function Composer({
   onStop,
   onNewSession,
   onExportSession,
+  injectedDraft,
   onForkSession,
   onArchiveSession,
 }: ComposerProps) {
@@ -159,6 +165,15 @@ export function Composer({
     el.style.height = '0px';
     el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT)}px`;
   }, [text]);
+
+  // 外部注入草稿（欢迎页建议卡）：token 推进时覆写并聚焦输入框。
+  const injectedToken = injectedDraft?.token ?? 0;
+  useEffect(() => {
+    if (injectedToken === 0) return;
+    setText(injectedDraft?.text ?? '');
+    textareaRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [injectedToken]);
 
   /* 斜杠命令：输入以 / 开头（单行、无空格）时弹出；中文名与拉丁别名前缀匹配。 */
   const slashCommands = useMemo<SlashCommand[]>(
