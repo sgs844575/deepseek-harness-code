@@ -8,6 +8,7 @@ import type {
   HostStateDto,
   McpServerDto,
   McpUpsertDto,
+  PromptAttachmentDto,
   ProviderPrefsDto,
   ProviderSnapshotDto,
   ProviderUpsertDto,
@@ -27,6 +28,7 @@ const bridge: ElectronBridge = {
     exportText: (filename: string, content: string) =>
       ipcRenderer.invoke(channels.app.exportText, filename, content),
     pickFolder: () => ipcRenderer.invoke(channels.app.pickFolder),
+    pickFiles: () => ipcRenderer.invoke(channels.app.pickFiles),
     openExternal: (url: string) => ipcRenderer.invoke(channels.app.openExternal, url),
     readRules: (scope: 'global' | 'project') => ipcRenderer.invoke(channels.app.readRules, scope),
     writeRules: (scope: 'global' | 'project', content: string) =>
@@ -65,8 +67,11 @@ const bridge: ElectronBridge = {
     open: (sessionId: string) => ipcRenderer.invoke(channels.session.open, sessionId),
     list: () => ipcRenderer.invoke(channels.session.list),
     history: (sessionId: string) => ipcRenderer.invoke(channels.session.history, sessionId),
-    prompt: (sessionId: string, text: string, options?: { mode?: 'queue' | 'steer' }) =>
-      ipcRenderer.invoke(channels.session.prompt, sessionId, text, options),
+    prompt: (
+      sessionId: string,
+      text: string,
+      options?: { mode?: 'queue' | 'steer'; attachments?: PromptAttachmentDto[] },
+    ) => ipcRenderer.invoke(channels.session.prompt, sessionId, text, options),
     cancel: (sessionId: string) => ipcRenderer.invoke(channels.session.cancel, sessionId),
     fork: (sessionId: string) => ipcRenderer.invoke(channels.session.fork, sessionId),
     subagents: (sessionId: string) => ipcRenderer.invoke(channels.session.subagents, sessionId),

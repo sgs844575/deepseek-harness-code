@@ -13,7 +13,9 @@ import type {
   McpUpsertDto,
   ModelInfoDto,
   PickDataPathResultDto,
+  PickFilesResultDto,
   PickFolderResultDto,
+  PromptAttachmentDto,
   PromptModeDto,
   ProviderDto,
   ProviderModelDto,
@@ -39,6 +41,8 @@ export interface ElectronBridge {
     exportText(filename: string, content: string): Promise<{ saved: boolean; path?: string }>;
     /** 弹出系统文件夹选择对话框（创建项目的源目录）。用户取消返回 { canceled: true }。 */
     pickFolder(): Promise<PickFolderResultDto>;
+    /** 弹出系统文件选择对话框（附件上传，多选）。用户取消返回 { canceled: true }。 */
+    pickFiles(): Promise<PickFilesResultDto>;
     /** 用系统默认浏览器打开外部链接（仅 https）。 */
     openExternal(url: string): Promise<void>;
     /** 读取 Agent 规则文件（AGENTS.md；global=数据目录 / project=当前工作区）。 */
@@ -73,7 +77,11 @@ export interface ElectronBridge {
     open(sessionId: string): Promise<void>;
     list(): Promise<SessionSummaryDto[]>;
     history(sessionId: string): Promise<SessionEventDto[]>;
-    prompt(sessionId: string, text: string, options?: { mode?: PromptModeDto }): Promise<void>;
+    prompt(
+      sessionId: string,
+      text: string,
+      options?: { mode?: PromptModeDto; attachments?: PromptAttachmentDto[] },
+    ): Promise<void>;
     cancel(sessionId: string): Promise<void>;
     /** 派生会话（fork）：以父会话已完成回合为种子创建新会话并返回其 id。 */
     fork(sessionId: string): Promise<{ sessionId: string }>;

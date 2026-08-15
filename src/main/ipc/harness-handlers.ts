@@ -31,8 +31,12 @@ export function registerHarnessHandlers(harness: HarnessService): void {
 
   ipcMain.handle(
     channels.session.prompt,
-    (_event, sessionId: string, text: string, options?: { mode?: 'queue' | 'steer' }) =>
-      harness.prompt(sessionId, text, options),
+    (
+      _event,
+      sessionId: string,
+      text: string,
+      options?: { mode?: 'queue' | 'steer'; attachments?: { path: string; name?: string }[] },
+    ) => harness.prompt(sessionId, text, options),
   );
 
   ipcMain.handle(channels.session.cancel, (_event, sessionId: string) =>

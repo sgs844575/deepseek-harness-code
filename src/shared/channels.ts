@@ -13,6 +13,8 @@ export const channels = {
     exportText: 'app:export-text',
     /** 选择文件夹（创建项目时选源目录）。 */
     pickFolder: 'app:pick-folder',
+    /** 选择文件（附件上传，多选）。 */
+    pickFiles: 'app:pick-files',
     /** 用系统默认浏览器打开外部链接（仅 https）。 */
     openExternal: 'app:open-external',
     /** 读取 Agent 规则文件（AGENTS.md：global=数据目录 / project=当前工作区）。 */

@@ -61,6 +61,19 @@ export function registerAppHandlers(harness: HarnessService): void {
     return { canceled: false, path: folder };
   });
 
+  // 选择文件（附件上传，多选；任意类型——Agent 经文件工具读取，图片可走 read-image）。
+  ipcMain.handle(channels.app.pickFiles, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const options = {
+      title: '选择要上传的附件',
+      properties: ['openFile', 'multiSelections'] as Electron.OpenDialogOptions['properties'],
+    };
+    const { canceled, filePaths } =
+      win !== null ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+    if (canceled || filePaths.length === 0) return { canceled: true, paths: [] };
+    return { canceled: false, paths: filePaths };
+  });
+
   // 用系统默认浏览器打开外部链接（仅接受 https，防 file:/javascript: 注入）。
   ipcMain.handle(channels.app.openExternal, async (_event, url: unknown) => {
     if (typeof url !== 'string') throw new Error('openExternal 参数必须是字符串');

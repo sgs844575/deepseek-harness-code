@@ -13,6 +13,7 @@ import type {
   AgentPresetDto,
   InteractionBehaviorDto,
   ProjectEntryDto,
+  PromptAttachmentDto,
   PromptModeDto,
   ProviderPrefsDto,
   ReasoningEffortDto,
@@ -46,7 +47,11 @@ export interface ComposerProps {
   onSelectPreset(presetId: string): void;
   /** 打开设置（模型菜单「管理模型」/ 斜杠命令入口）。 */
   onOpenSettings(section?: SettingsSectionId): void;
-  onSend(text: string, mode: PromptModeDto): void | Promise<void>;
+  onSend(
+    text: string,
+    mode: PromptModeDto,
+    attachments: PromptAttachmentDto[],
+  ): void | Promise<void>;
   onStop(): void | Promise<void>;
   onNewSession(): void;
   /** 在指定项目（工作区）新建会话：非当前项目时先切换工作区，就绪后自动创建。 */
@@ -68,6 +73,9 @@ export interface ComposerProps {
 }
 
 const TEXTAREA_MAX_HEIGHT = 220;
+
+/** 单条消息允许携带的附件数（与主进程 ATTACHMENT_MAX_COUNT 一致）。 */
+const ATTACHMENTS_MAX = 8;
 
 /** harness llm-deepseek 的默认档（消息设置「默认」选项 = 恢复这些值）。 */
 const DEFAULT_MAX_TOKENS = 256_000;
@@ -160,6 +168,8 @@ export function Composer({
   const [menu, setMenu] = useState<MenuId | null>(null);
   /** ＋菜单二级视图：动作列表 / 项目选择（在项目中新建会话）。 */
   const [plusView, setPlusView] = useState<'actions' | 'projects'>('actions');
+  /** 待发送附件（chips 展示；发送时随消息交给主进程复制进工作区）。 */
+  const [attachments, setAttachments] = useState<PromptAttachmentDto[]>([]);
   /** 斜杠菜单：活动项下标 + 本次输入内的关闭标记（Esc/外点后不再弹出，改输入即复位）。 */
   const [slashActive, setSlashActive] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState(false);
@@ -363,12 +373,38 @@ export function Composer({
 
   const submit = useCallback(() => {
     const value = text.trim();
-    if (value.length === 0 || disabled) return;
+    if ((value.length === 0 && attachments.length === 0) || disabled) return;
     setText('');
     const mode: PromptModeDto = running ? runningBehavior : 'queue';
-    void onSend(value, mode);
+    const files = attachments;
+    setAttachments([]);
+    void onSend(value.length > 0 ? value : '（见附件）', mode, files);
     textareaRef.current?.focus();
-  }, [text, disabled, running, runningBehavior, onSend]);
+  }, [text, attachments, disabled, running, runningBehavior, onSend]);
+
+  /** ＋菜单「上传附件」：系统多选对话框 → chips（去重、封顶 8 个）。 */
+  const pickAttachments = useCallback(async () => {
+    setMenu(null);
+    try {
+      const result = await requireBridge().app.pickFiles();
+      if (result.canceled || result.paths.length === 0) return;
+      setAttachments((previous) => {
+        const known = new Set(previous.map((item) => item.path.toLowerCase()));
+        const next = [...previous];
+        for (const filePath of result.paths) {
+          if (known.has(filePath.toLowerCase())) continue;
+          if (next.length >= ATTACHMENTS_MAX) break;
+          const name = filePath.split(/[\\/]/).filter(Boolean).pop() ?? filePath;
+          next.push({ path: filePath, name });
+          known.add(filePath.toLowerCase());
+        }
+        return next;
+      });
+      textareaRef.current?.focus();
+    } catch (error) {
+      console.error('选择附件失败', error);
+    }
+  }, []);
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -405,7 +441,7 @@ export function Composer({
     [slashOpen, slashMatches, slashIndex, runSlashCommand, submit],
   );
 
-  const canSend = !disabled && text.trim().length > 0;
+  const canSend = !disabled && (text.trim().length > 0 || attachments.length > 0);
 
   /* 项目选择列表：已注册项目 + 当前工作区（未注册也出现在首位，标「当前」）。 */
   const projectOptions = useMemo(() => {
@@ -485,6 +521,28 @@ export function Composer({
                 </span>
                 <span className="composer__slash-alias">/{command.alias}</span>
               </button>
+            ))}
+          </div>
+        )}
+        {attachments.length > 0 && (
+          <div className="composer__attachments">
+            {attachments.map((attachment) => (
+              <span className="composer__attach" key={attachment.path} title={attachment.path}>
+                <AttachIcon />
+                <span className="composer__attach-name">{attachment.name}</span>
+                <button
+                  type="button"
+                  className="composer__attach-remove"
+                  title="移除附件"
+                  onClick={() =>
+                    setAttachments((previous) =>
+                      previous.filter((item) => item.path !== attachment.path),
+                    )
+                  }
+                >
+                  <AttachRemoveIcon />
+                </button>
+              </span>
             ))}
           </div>
         )}
@@ -590,6 +648,21 @@ export function Composer({
               </button>
               {menu === 'plus' && plusView === 'actions' && (
                 <div className="composer__pop" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="composer__pop-item"
+                    disabled={disabled || attachments.length >= ATTACHMENTS_MAX}
+                    onClick={() => void pickAttachments()}
+                  >
+                    <span className="composer__pop-item-icon"><AttachIcon /></span>
+                    <span className="composer__pop-item-main">
+                      <span className="composer__pop-item-title">上传附件…</span>
+                      <span className="composer__pop-item-desc">
+                        复制进工作区 .dsh/uploads/，Agent 用文件工具读取（单个 ≤ 20 MiB）
+                      </span>
+                    </span>
+                  </button>
                   <button
                     type="button"
                     role="menuitem"
@@ -1143,6 +1216,27 @@ function FolderPillIcon() {
         d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.2h7a2 2 0 0 1 2 2v8.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-11Z"
         stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+/** 附件（回形针）。 */
+function AttachIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M17.6 7.2 9.9 14.9a2.6 2.6 0 0 0 3.7 3.7l7.1-7.1a4.8 4.8 0 0 0-6.8-6.8l-7.4 7.4a6.9 6.9 0 0 0 9.8 9.8l3.2-3.2"
+        stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** 移除附件（小叉）。 */
+function AttachRemoveIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M5.5 5.5l13 13M18.5 5.5l-13 13" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
     </svg>
   );
 }

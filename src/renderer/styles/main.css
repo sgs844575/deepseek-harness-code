@@ -2259,6 +2259,63 @@ select:focus-visible {
   opacity: 0.55;
 }
 
+/* ---- 附件 chips（＋菜单「上传附件」后待发送清单） ---- */
+
+.composer__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px 0;
+}
+
+.composer__attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  padding: 4px 6px 4px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--fill-hover);
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.composer__attach svg {
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.composer__attach-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+
+.composer__attach-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.composer__attach-remove:hover {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+
 .composer__textarea {
   display: block;
   width: 100%;

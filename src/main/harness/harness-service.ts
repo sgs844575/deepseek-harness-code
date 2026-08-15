@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { statSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { resolveHarnessPaths } from './paths.js';
@@ -55,7 +56,18 @@ type EventListener = (envelope: HarnessEventEnvelope) => void;
 
 export interface PromptOptions {
   mode?: 'queue' | 'steer';
+  /** 随消息发送的附件（复制进工作区 .dsh/uploads/ 并在消息文本中注明路径）。 */
+  attachments?: { path: string; name?: string }[];
 }
+
+/** 单个附件的大小上限（20 MiB）。 */
+const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
+
+/** 单条消息的附件数量上限。 */
+const ATTACHMENT_MAX_COUNT = 8;
+
+/** 附件在工作区内的落地目录（Agent 的文件工具可直接读取）。 */
+const ATTACHMENT_DIR = '.dsh/uploads';
 
 /** llm-deepseek 设置段的完整形状（供应商服务整段写入）。 */
 export interface LlmSectionInput {
@@ -497,22 +509,65 @@ export class HarnessService {
     };
   }
 
-  /** 发送一轮用户输入：queue 排队跟随，steer 插话当前回合。 */
+  /** 发送一轮用户输入：queue 排队跟随，steer 插话当前回合。
+   * 附件先复制进工作区 .dsh/uploads/<时间戳>/（Agent 的文件工具按路径读取，
+   * 模型通道保持纯文本——图片等二进制由 Agent 自行用对应工具消费），
+   * 再把附件路径清单附在消息文本尾部。 */
   async prompt(sessionId: string, text: string, options?: PromptOptions): Promise<void> {
     const handle = await this.ensureAgent(sessionId);
     const helpers = this.llmHelpers;
     if (helpers === undefined) throw new Error('harness 尚未就绪');
+    let finalText = text;
+    const files = options?.attachments ?? [];
+    if (files.length > 0) {
+      if (files.length > ATTACHMENT_MAX_COUNT) {
+        throw new Error(`附件最多 ${ATTACHMENT_MAX_COUNT} 个`);
+      }
+      const staged = await this.stageAttachments(files);
+      finalText = `${text}\n\n[用户上传了 ${staged.length} 个附件]\n${staged
+        .map((entry) => `- ${entry.displayName}: ${entry.stagedPath}`)
+        .join('\n')}\n（附件已保存在工作区内，请按需用文件工具读取）`;
+    }
     // 多 key 轮询：每轮换下一把启用的 key（未变化时 resolver 返回 undefined）。
     const nextKey = this.keyResolver?.();
     if (nextKey !== undefined) {
       await this.ctx?.credentials.set(API_KEY_REF, nextKey);
     }
     const message: UserMessage = helpers.createUserMessage({
-      content: [{ type: 'text', text }],
+      content: [{ type: 'text', text: finalText }],
       source: { kind: 'user' },
     });
     if (options?.mode === 'steer') handle.agent.steer(message);
     else handle.agent.followup(message);
+  }
+
+  /** 附件落地：复制到 <workspace>/.dsh/uploads/<时间戳>/<安全文件名>，返回展示名与目标路径。 */
+  private async stageAttachments(
+    files: { path: string; name?: string }[],
+  ): Promise<{ displayName: string; stagedPath: string }[]> {
+    const workspace = this.state.workspace;
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[:.]/g, '-')
+      .slice(0, 19);
+    const dir = path.join(workspace, ATTACHMENT_DIR, stamp);
+    await mkdir(dir, { recursive: true });
+    const staged: { displayName: string; stagedPath: string }[] = [];
+    for (const file of files) {
+      const info = await stat(file.path);
+      if (!info.isFile()) throw new Error(`附件不是常规文件：${file.path}`);
+      if (info.size > ATTACHMENT_MAX_BYTES) {
+        throw new Error(
+          `附件 ${path.basename(file.path)} 超过 ${Math.round(ATTACHMENT_MAX_BYTES / 1024 / 1024)} MiB 上限`,
+        );
+      }
+      const displayName = (file.name ?? path.basename(file.path)).trim() || 'attachment';
+      const safeName = displayName.replace(/[\\/:*?"<>|]/g, '_');
+      const target = path.join(dir, safeName);
+      await copyFile(file.path, target);
+      staged.push({ displayName, stagedPath: target });
+    }
+    return staged;
   }
 
   /** 取消运行中的回合（保留收件箱中的排队输入）。 */

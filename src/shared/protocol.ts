@@ -285,6 +285,20 @@ export interface PickFolderResultDto {
   path?: string;
 }
 
+/** 选择文件的结果（附件上传；多选）。 */
+export interface PickFilesResultDto {
+  canceled: boolean;
+  paths: string[];
+}
+
+/** 随消息发送的附件（主进程复制进工作区 .dsh/uploads/ 并在消息中注明路径）。 */
+export interface PromptAttachmentDto {
+  /** 用户本地文件绝对路径。 */
+  path: string;
+  /** 展示名（basename，chips 渲染用）。 */
+  name: string;
+}
+
 /** 修改数据存储路径的结果。 */
 export interface PickDataPathResultDto {
   changed: boolean;

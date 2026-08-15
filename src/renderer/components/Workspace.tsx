@@ -3,6 +3,7 @@ import type {
   AgentPresetDto,
   HarnessEventDto,
   HostStateDto,
+  PromptAttachmentDto,
   SessionSummaryDto,
   SubagentRunDto,
 } from '../../shared/protocol.js';
@@ -384,11 +385,17 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
     [],
   );
 
-  const handleSend = useCallback(async (text: string, mode: 'queue' | 'steer') => {
-    const id = activeIdRef.current;
-    if (id === null) return;
-    await requireBridge().session.prompt(id, text, { mode });
-  }, []);
+  const handleSend = useCallback(
+    async (text: string, mode: 'queue' | 'steer', attachments: PromptAttachmentDto[]) => {
+      const id = activeIdRef.current;
+      if (id === null) return;
+      await requireBridge().session.prompt(id, text, {
+        mode,
+        ...(attachments.length > 0 ? { attachments } : {}),
+      });
+    },
+    [],
+  );
 
   const handleStop = useCallback(async () => {
     const id = activeIdRef.current;

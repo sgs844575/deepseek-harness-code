@@ -23,3 +23,5 @@ config/harness/plugins/*
 *.log
 .DS_Store
 Thumbs.db
+# 附件落地目录（会话上传的工作区副本）
+.dsh/
