@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-code",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Electron client foundation with layered, single-responsibility architecture",
   "private": true,
   "main": ".vite/build/index.mjs",

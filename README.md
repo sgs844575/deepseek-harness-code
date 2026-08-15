@@ -1,6 +1,6 @@
 # DeepSeek Harness Code
 
-[![version](https://img.shields.io/badge/version-v0.1.1-blue)]()
+[![version](https://img.shields.io/badge/version-v0.1.2-blue)]()
 [![platform](https://img.shields.io/badge/platform-Windows-informational)]()
 [![license](https://img.shields.io/badge/license-MIT-green)]()
 [![author](https://img.shields.io/badge/author-逆流无邪-orange)]()
@@ -128,11 +128,11 @@ node scripts/smoke-harness.mjs
 
 （开发客户端本体也可在设置页把 baseURL 指到 mock 验证 UI 流。）
 
-## 打包发布（v0.1.1，Windows）
+## 打包发布（v0.1.2，Windows）
 
 ```powershell
 npm run dist
-# 产物：release/deepseek-harness-code-v0.1.1-win-x64.zip
+# 产物：release/deepseek-harness-code-v0.1.2-win-x64.zip
 ```
 
 发布 zip 的组成与运行方式（**解压即用，双击 exe 即可，机器无需 Node.js**）：
@@ -153,7 +153,7 @@ npm run dist
 - 仓库：<https://github.com/sgs844575/deepseek-harness-code>
 - 协议：[MIT](./LICENSE)；内嵌的 [deepseek-harness](./deepseek-harness)
   （MIT）与 JetBrains Mono 字体（SIL OFL 1.1）分属各自协议
-- 当前版本：v0.1.1
+- 当前版本：v0.1.2
 
 ## 目录速览
 
