@@ -1404,7 +1404,8 @@ select:focus-visible {
 
 /* 时间流（zcode / Claude Code 式）：全宽左对齐，不做居中窄栏。 */
 .chat__scroll {
-  max-width: none;
+  max-width: 820px;
+  margin: 0 auto;
 }
 
 .chat__empty {
