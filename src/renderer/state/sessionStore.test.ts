@@ -173,6 +173,42 @@ describe('sessionStore fold', () => {
     expect(assistant?.tools[0].resultText).toContain('ToolError');
   });
 
+  it('真实事件序（assistant/message 先落定、tool/call 随后）：工具挂回该消息，各步骤按时间线成独立消息', () => {
+    const state = foldEvents(initialSessionState(), [
+      event('user/message', { message: { id: 'u1', role: 'user', content: [{ type: 'text', text: '查版本' }], source: { kind: 'user' } } }, 1),
+      event('turn/start', { turn: 1 }, 2),
+      // step 1：reasoning → 消息落定 → 工具调用（真实序：message 先于 tool/call）
+      event('assistant/chunk', { turn: 1, step: 1, chunk: { type: 'reasoning-delta', index: 0, text: '找文件' } }, 3),
+      event('assistant/message', { turn: 1, step: 1, message: { id: 'a1', role: 'assistant', content: [{ type: 'reasoning', text: '找文件' }], source: { kind: 'model' } } }, 4),
+      event('tool/call', { turn: 1, step: 1, callId: 'c1', name: 'glob', arguments: '{}' }, 5),
+      event('tool/result', {
+        turn: 1, step: 1,
+        message: { id: 't1', role: 'user', content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'package.json' }] }], source: { kind: 'tool', callId: 'c1' } },
+      }, 6),
+      // step 2：新的独立消息（reasoning + 工具）
+      event('assistant/chunk', { turn: 1, step: 2, chunk: { type: 'reasoning-delta', index: 0, text: '读取' } }, 7),
+      event('assistant/message', { turn: 1, step: 2, message: { id: 'a2', role: 'assistant', content: [{ type: 'reasoning', text: '读取' }], source: { kind: 'model' } } }, 8),
+      event('tool/call', { turn: 1, step: 2, callId: 'c2', name: 'read', arguments: '{}' }, 9),
+      event('tool/result', {
+        turn: 1, step: 2,
+        message: { id: 't2', role: 'user', content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'version 0.1.1' }] }], source: { kind: 'tool', callId: 'c2' } },
+      }, 10),
+      // step 3：最终文本（不带工具）
+      event('assistant/chunk', { turn: 1, step: 3, chunk: { type: 'text-delta', index: 1, text: '版本是 0.1.1' } }, 11),
+      event('assistant/message', { turn: 1, step: 3, message: { id: 'a3', role: 'assistant', content: [{ type: 'text', text: '版本是 0.1.1' }], source: { kind: 'model' } } }, 12),
+      event('turn/end', { turn: 1, reason: { kind: 'stop' } }, 13),
+    ]);
+    const assistants = state.messages.filter((message) => message.role === 'assistant');
+    expect(assistants).toHaveLength(3);
+    // 工具挂回它所属步骤的消息（而不是被推给下一条新消息）。
+    expect(assistants[0]).toMatchObject({ reasoning: '找文件', text: '' });
+    expect(assistants[0].tools[0]).toMatchObject({ callId: 'c1', status: 'done', resultText: 'package.json' });
+    expect(assistants[1]).toMatchObject({ reasoning: '读取' });
+    expect(assistants[1].tools[0]).toMatchObject({ callId: 'c2', status: 'done' });
+    // 最终文本是独立消息且不携带工具 → 时间线顺序 = 消息顺序。
+    expect(assistants[2]).toMatchObject({ text: '版本是 0.1.1', tools: [] });
+  });
+
   it('turn/end 的错误以错误行呈现', () => {
     const state = foldEvent(
       initialSessionState(),

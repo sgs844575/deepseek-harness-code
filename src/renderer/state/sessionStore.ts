@@ -194,6 +194,46 @@ function mapLastAssistant(
   return state;
 }
 
+/**
+ * 工具调用挂靠最近一条助手消息（**不论是否已落定**）。
+ * harness 事件序：step 内 assistant/message 先落定、tool/call 随后到达——
+ * 若只在流式时挂靠，工具会被推给下一条新消息，破坏正文/工具的时间线顺序。
+ */
+function appendToolCall(
+  state: SessionUiState,
+  tool: ToolCallItem,
+  idHint: string,
+): SessionUiState {
+  const last = state.messages[state.messages.length - 1];
+  if (last === undefined || last.role !== 'assistant') {
+    const seeded = appendAssistantPlaceholder(state, idHint);
+    return mapLastAssistant(seeded, (message) => ({ ...message, tools: [...message.tools, tool] }));
+  }
+  return mapLastAssistant(state, (message) => ({ ...message, tools: [...message.tools, tool] }));
+}
+
+/** 工具结果按 callId 精确回写：从尾部找到持有该调用的助手消息（慢结果
+ * 不被后续新消息截胡）；未知 callId 丢弃。 */
+function mapToolResult(
+  state: SessionUiState,
+  callId: string,
+  mutate: (tool: ToolCallItem) => ToolCallItem,
+): SessionUiState {
+  if (callId.length === 0) return state;
+  const messages = [...state.messages];
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.role === 'assistant' && message.tools.some((tool) => tool.callId === callId)) {
+      messages[i] = {
+        ...message,
+        tools: message.tools.map((tool) => (tool.callId === callId ? mutate(tool) : tool)),
+      };
+      return { ...state, messages };
+    }
+  }
+  return state;
+}
+
 export function foldEvent(state: SessionUiState, event: SessionEventDto): SessionUiState {
   const data = asRecord(event.data) ?? {};
   switch (event.type) {
@@ -288,17 +328,14 @@ export function foldEvent(state: SessionUiState, event: SessionEventDto): Sessio
       return { ...state, todos };
     }
     case 'tool/call': {
-      const withPlaceholder = appendAssistantPlaceholder(state, `assistant-${event.seq}`);
       const callId = typeof data.callId === 'string' ? data.callId : `call-${event.seq}`;
       const name = typeof data.name === 'string' ? data.name : 'unknown';
       const args = typeof data.arguments === 'string' ? data.arguments : '';
-      return mapLastAssistant(withPlaceholder, (message) => ({
-        ...message,
-        tools: [
-          ...message.tools,
-          { callId, name, argumentsText: args, status: 'running', resultText: '' },
-        ],
-      }));
+      return appendToolCall(
+        state,
+        { callId, name, argumentsText: args, status: 'running', resultText: '' },
+        `assistant-${event.seq}`,
+      );
     }
     case 'tool/result': {
       // 关联 id 位于 ToolResultMessage.content[0]（tool-result 块）的 toolCallId 字段。
@@ -313,20 +350,13 @@ export function foldEvent(state: SessionUiState, event: SessionEventDto): Sessio
             ? firstBlock.callId
             : '';
       const error = asRecord(data.error);
-      return mapLastAssistant(state, (message) => ({
-        ...message,
-        tools: message.tools.map((tool) =>
-          tool.callId !== '' && tool.callId === callId
-            ? {
-                ...tool,
-                status: error !== undefined ? 'error' : 'done',
-                resultText:
-                  error !== undefined
-                    ? `${String(error.name ?? 'error')}: ${String(error.message ?? '')}\n${resultText(data.message)}`
-                    : resultText(data.message),
-              }
-            : tool,
-        ),
+      return mapToolResult(state, callId, (tool) => ({
+        ...tool,
+        status: error !== undefined ? 'error' : 'done',
+        resultText:
+          error !== undefined
+            ? `${String(error.name ?? 'error')}: ${String(error.message ?? '')}\n${resultText(data.message)}`
+            : resultText(data.message),
       }));
     }
     case 'turn/start':
