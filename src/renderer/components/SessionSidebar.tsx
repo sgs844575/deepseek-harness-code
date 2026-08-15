@@ -46,6 +46,9 @@ interface ProjectRow {
   current: boolean;
 }
 
+/** 「最近」区展示的会话条数上限。 */
+const RECENT_LIMIT = 8;
+
 /**
  * 会话侧栏（Codex 式）：顶部工作区标题（▾ 展开路径/版本信息）+ 搜索/通知按钮；
  * 主导航「新对话 / 已归档」；会话按项目（cwd）分组——当前工作区默认展开、
@@ -190,15 +193,9 @@ export function SessionSidebar({
     return rows;
   }, [activeList, currentKey, settings.projects]);
 
-  /** 「最近」：其他项目（其他 cwd）的会话平铺，供折叠项目快捷访问。 */
-  const recentSessions = useMemo(
-    () =>
-      activeList.filter((session) => {
-        const cwd = session.cwd ?? '';
-        return cwd.length > 0 && cwd.toLowerCase() !== currentKey.toLowerCase();
-      }),
-    [activeList, currentKey],
-  );
+  /** 「最近」：跨项目按最后活跃平铺的最近 N 条（activeList 已按活跃倒序）。
+   * 原先只列其他项目的会话，单项目用户永远看到「无聊天」——改为全项目平铺。 */
+  const recentSessions = useMemo(() => activeList.slice(0, RECENT_LIMIT), [activeList]);
 
   const searching = view === 'chats' && searchOpen && query.trim().length > 0;
   const searchResults = useMemo(() => {
