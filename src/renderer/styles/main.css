@@ -1414,6 +1414,128 @@ select:focus-visible {
   padding: 56px 0;
 }
 
+/* ---- 回合分组：一条用户消息 = 一轮锚点，其后所有助手产出归属该轮 ---- */
+
+.round {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  margin-bottom: 24px;
+}
+
+/* 用户气泡：右置、轻底描边，尾角收小（Codex 参照） */
+.round__user-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.round__user {
+  max-width: 82%;
+  padding: 9px 13px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px 14px 4px 14px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--glass-bg-strong));
+  color: var(--fg);
+  font-size: var(--font-size-base);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 轮线程容器：左侧竖线脊从元信息行起贯穿到本轮最后一条产出，
+ * 把「处理概要 + 思考 / 工具 / 正文」串成一个整体（归属锚点=用户气泡）。 */
+.round__thread {
+  margin-top: 7px;
+  padding-left: 12px;
+  border-left: 2px solid color-mix(in srgb, var(--fg) 16%, transparent);
+}
+
+.round--running .round__thread {
+  border-left-color: color-mix(in srgb, var(--accent) 48%, transparent);
+}
+
+/* 轮首元信息：回复数 · 工具数 · 运行态 + 右端用户消息复制（hover 显现）。 */
+.round__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 20px;
+  font-size: 11.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.round__meta-copy {
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.round:hover .round__meta-copy,
+.round__meta-copy:focus-within {
+  opacity: 1;
+}
+
+.round__running {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+
+/* 轮内消息间距紧凑（连续性强于组间）；每个操作（消息）在线程脊上取一个节点 */
+.round__body .msg {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.round__body .msg:last-child {
+  margin-bottom: 0;
+}
+
+/* 时间线节点：轮内每个操作（思考条 / 每个工具行 / 正文块 / 错误行）
+ * 在线程脊上取一个空心圆点；操作元素左缘即消息左缘（-16px 落在脊心）。 */
+.round__body .msg__reasoning,
+.round__body .msg__text,
+.round__body .toollow,
+.round__body .msg__error {
+  position: relative;
+}
+
+.round__body .msg__reasoning::before,
+.round__body .msg__text::before,
+.round__body .toollow::before,
+.round__body .msg__error::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 9px;
+  width: 7px;
+  height: 7px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--wash);
+  border: 2px solid color-mix(in srgb, var(--fg) 28%, transparent);
+}
+
+.round__body .msg__text::before {
+  top: 8px;
+}
+
+.round__body .msg__error::before {
+  border-color: var(--danger);
+}
+
+/* 运行中的工具行：节点转为强调色脉冲 */
+.round__body .toollow--running::before {
+  border-color: var(--accent);
+  animation: reasoning-dot 1.1s ease-in-out infinite;
+}
+
+.round__body .toollow--error::before {
+  border-color: var(--danger);
+}
+
 /* ---- 消息行（工作流时间线：无头像 / 无气泡，正文直接排在背景上） ---- */
 
 .msg {
@@ -1423,35 +1545,6 @@ select:focus-visible {
   margin-bottom: 14px;
 }
 
-/* 用户消息：时间流里的一行亮色文本（❯ 前缀），上下留白略大 */
-.msg--user {
-  margin: 18px 0;
-}
-
-.msg__userline {
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
-  font-size: var(--font-size-base);
-  line-height: 1.65;
-}
-
-.msg__usermark {
-  flex-shrink: 0;
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  user-select: none;
-}
-
-.msg__usertext {
-  min-width: 0;
-  color: var(--fg);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-/* 助手正文：无底色，直接排在背景上 */
 .msg__text {
   width: 100%;
   font-size: var(--font-size-base);
@@ -1697,7 +1790,7 @@ select:focus-visible {
 }
 
 .toollow__text {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 60px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1706,6 +1799,7 @@ select:focus-visible {
 
 .toollow__state {
   flex-shrink: 0;
+  margin-left: 2px;
   font-size: 11px;
 }
 
@@ -1718,6 +1812,7 @@ select:focus-visible {
 }
 
 .toollow__chev {
+  margin-left: auto;
   display: inline-flex;
   opacity: 0;
   transform: rotate(0deg);

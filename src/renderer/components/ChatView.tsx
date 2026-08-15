@@ -6,11 +6,40 @@ import { buildEditDiff, isEditTool, type EditDiffView } from './editDiff';
 import { toolGlyphKind, toolSummary, type ToolGlyphKind } from './toolSummary';
 
 /**
- * 对话流（Cherry Studio 风格）：助手消息 = 左头像 + 无底色正文（工具卡
- * 随正文纵向排列）；用户消息 = 右侧浅色气泡 + 右头像。消息操作按钮
- * （复制）hover 才浮现。showThinking 关闭时每轮仅展示第一次思考。
+ * 对话流（回合分组式，Codex 参照）：一条用户消息 = 一轮的锚点，
+ * 其后所有助手产出（思考条 / 正文 / 工具行 / 错误）都归属到该轮内连续
+ * 排布——用户气泡右置，轮首一条元信息（回复数 · 工具数 · 运行态）加分隔线，
+ * 轮内间距紧凑、轮间拉开。showThinking 关闭时每轮仅展示第一次思考。
  * 对话流尾部渲染父会话的子代理运行卡片（折叠展开子会话 transcript）。
  */
+
+/** 一轮对话：锚点用户消息 + 归属其后的全部助手产出。 */
+export interface ChatRound {
+  key: string;
+  /** 锚点用户消息；null = 首条用户消息之前的前导片段（如启动错误）。 */
+  user: ChatMessage | null;
+  items: ChatMessage[];
+}
+
+/** 扁平消息按用户消息切轮：每条用户消息开启新一轮，其余消息归入当前轮。 */
+export function groupRounds(messages: ChatMessage[]): ChatRound[] {
+  const rounds: ChatRound[] = [];
+  let current: ChatRound | null = null;
+  for (const message of messages) {
+    if (message.role === 'user') {
+      current = { key: message.id, user: message, items: [] };
+      rounds.push(current);
+      continue;
+    }
+    if (current === null) {
+      current = { key: `prelude-${message.id}`, user: null, items: [] };
+      rounds.push(current);
+    }
+    current.items.push(message);
+  }
+  return rounds;
+}
+
 export function ChatView({
   state,
   hostReady,
@@ -32,23 +61,7 @@ export function ChatView({
     bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [state.messages, state.running]);
 
-  /** 关闭思考时：每轮第一个含思考的消息仍展示（其余隐藏）。 */
-  const firstReasoningByTurn = useMemo(() => {
-    if (showThinking) return null;
-    const visible = new Set<string>();
-    let seenInTurn = false;
-    for (const message of state.messages) {
-      if (message.role === 'user') {
-        seenInTurn = false;
-        continue;
-      }
-      if (message.role === 'assistant' && message.reasoning.length > 0 && !seenInTurn) {
-        visible.add(message.id);
-        seenInTurn = true;
-      }
-    }
-    return visible;
-  }, [state.messages, showThinking]);
+  const rounds = useMemo(() => groupRounds(state.messages), [state.messages]);
 
   return (
     <div className="chat">
@@ -58,11 +71,12 @@ export function ChatView({
             {hostReady ? '向 DeepSeek agent 提问，开始你的第一轮任务。' : '正在连接 harness…'}
           </div>
         )}
-        {state.messages.map((message) => (
-          <MessageRow
-            key={message.id}
-            message={message}
-            showReasoning={showThinking || (firstReasoningByTurn?.has(message.id) ?? false)}
+        {rounds.map((round, index) => (
+          <RoundView
+            key={round.key}
+            round={round}
+            running={state.running && index === rounds.length - 1}
+            showThinking={showThinking}
           />
         ))}
         {subagents.length > 0 &&
@@ -72,6 +86,72 @@ export function ChatView({
         <div ref={bottomRef} />
       </div>
     </div>
+  );
+}
+
+/* ─────────────────────────── 回合 ─────────────────────────── */
+
+function RoundView({
+  round,
+  running,
+  showThinking,
+}: {
+  round: ChatRound;
+  /** 本轮是最新一轮且回合运行中（元信息行显示运行态）。 */
+  running: boolean;
+  showThinking: boolean;
+}) {
+  /* 关闭思考时：本轮第一个含思考的消息仍展示（其余隐藏）。 */
+  const firstReasoningId = useMemo(() => {
+    if (showThinking) return null;
+    const first = round.items.find(
+      (message) => message.role === 'assistant' && message.reasoning.length > 0,
+    );
+    return first?.id ?? null;
+  }, [round.items, showThinking]);
+
+  const replyCount = round.items.filter((message) => message.role === 'assistant').length;
+  const toolCount = round.items.reduce((count, message) => count + message.tools.length, 0);
+  const userText = round.user?.text ?? '';
+
+  return (
+    <section className={`round${running ? ' round--running' : ''}`}>
+      {round.user !== null && (
+        <div className="round__user-row">
+          <div className="round__user">{userText}</div>
+        </div>
+      )}
+      <div className="round__thread">
+        <div className="round__meta">
+          <span>
+            {replyCount > 0 ? `${replyCount} 段回复` : '等待回复'}
+            {toolCount > 0 && ` · ${toolCount} 次工具`}
+          </span>
+          {running && (
+            <span className="round__running">
+              运行中
+              <span className="msg__reasoning-dots" aria-hidden>
+                <i /><i /><i />
+              </span>
+            </span>
+          )}
+          {userText.length > 0 && (
+            <span className="round__meta-copy">
+              <CopyButton text={userText} />
+            </span>
+          )}
+        </div>
+        <div className="round__body">
+          {round.items.map((message) => (
+            <MessageRow
+              key={message.id}
+              message={message}
+              showReasoning={showThinking || firstReasoningId === message.id}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -143,20 +223,10 @@ function SubagentCard({ run, state }: { run: SubagentRunDto; state?: SessionUiSt
   );
 }
 
+/** 助手 / 错误消息行（用户消息由 RoundView 的气泡渲染）。 */
 function MessageRow({ message, showReasoning }: { message: ChatMessage; showReasoning: boolean }) {
   if (message.role === 'error') {
     return <div className="msg msg--error"><div className="msg__error">{message.text}</div></div>;
-  }
-  // 用户消息：时间流里的一行亮色文本（❯ 前缀），不做气泡。
-  if (message.role === 'user') {
-    return (
-      <div className="msg msg--user">
-        <div className="msg__userline">
-          <span className="msg__usermark" aria-hidden>❯</span>
-          <span className="msg__usertext">{message.text}</span>
-        </div>
-      </div>
-    );
   }
   const thinking = message.streaming && message.reasoning.length > 0;
   const durationSeconds =
