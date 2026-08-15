@@ -25,6 +25,9 @@ export function registerHarnessHandlers(harness: HarnessService): void {
 
   ipcMain.handle(channels.session.list, () => harness.listSessions());
 
+  // 批量会话标题（侧栏冷启动展示；读取最近会话的 session/title 事件）。
+  ipcMain.handle(channels.session.titles, () => harness.listSessionTitles());
+
   ipcMain.handle(channels.session.history, (_event, sessionId: string) =>
     harness.sessionHistory(sessionId),
   );

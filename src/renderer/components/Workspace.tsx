@@ -56,6 +56,8 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
   const [states, setStates] = useState<Record<string, SessionUiState>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [host, setHost] = useState<HostStateDto | null>(null);
+  /** 批量拉取的冷会话标题（未加载历史的会话侧栏展示用；live 事件覆盖）。 */
+  const [sessionTitles, setSessionTitles] = useState<Record<string, string>>({});
   /** 外部注入输入框的草稿（欢迎页建议卡）：token 推进时覆写并聚焦。 */
   const [injectedDraft, setInjectedDraft] = useState<{ text: string; token: number }>({ text: '', token: 0 });
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
@@ -96,8 +98,14 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
 
   const refreshSessions = useCallback(async () => {
     try {
-      const list = await requireBridge().session.list();
+      const bridge = requireBridge();
+      const list = await bridge.session.list();
       setSessions(list);
+      // 冷启动标题：未加载过历史的会话在侧栏只显示 id 前缀，这里批量补齐。
+      void bridge.session
+        .titles()
+        .then((titles) => setSessionTitles(titles))
+        .catch((error) => console.error('读取会话标题失败', error));
     } catch (error) {
       console.error('读取会话列表失败', error);
     }
@@ -516,11 +524,15 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
     <div className="workspace">
       <SessionSidebar
         sessions={sessions}
-        titles={Object.fromEntries(
-          Object.entries(states)
-            .filter(([, state]) => state.title.length > 0)
-            .map(([id, state]) => [id, state.title]),
-        )}
+        titles={{
+          // 冷启动批量标题打底，已加载会话的事件流折叠值覆盖（live 真值）。
+          ...sessionTitles,
+          ...Object.fromEntries(
+            Object.entries(states)
+              .filter(([, state]) => state.title.length > 0)
+              .map(([id, state]) => [id, state.title]),
+          ),
+        }}
         localNames={localNames}
         activeId={activeId}
         workspace={host?.workspace ?? ''}

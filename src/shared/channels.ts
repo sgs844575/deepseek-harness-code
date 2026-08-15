@@ -44,6 +44,8 @@ export const channels = {
     create: 'session:create',
     open: 'session:open',
     list: 'session:list',
+    /** 批量读取会话标题（侧栏冷启动展示；session/title 事件折叠值）。 */
+    titles: 'session:titles',
     history: 'session:history',
     prompt: 'session:prompt',
     cancel: 'session:cancel',

@@ -66,6 +66,7 @@ const bridge: ElectronBridge = {
       ipcRenderer.invoke(channels.session.create, options),
     open: (sessionId: string) => ipcRenderer.invoke(channels.session.open, sessionId),
     list: () => ipcRenderer.invoke(channels.session.list),
+    titles: (): Promise<Record<string, string>> => ipcRenderer.invoke(channels.session.titles),
     history: (sessionId: string) => ipcRenderer.invoke(channels.session.history, sessionId),
     prompt: (
       sessionId: string,

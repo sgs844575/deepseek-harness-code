@@ -16,7 +16,7 @@ import type { SettingsSectionId } from './SettingsView';
 export interface SessionSidebarProps {
   /** 全量会话（含已归档；归档过滤在本组件内部完成）。 */
   sessions: SessionSummaryDto[];
-  /** 事件流标题（session/title 折叠值）。 */
+  /** 会话标题（session/title 折叠值：批量冷读打底 + 已加载会话的事件流真值）。 */
   titles: Record<string, string>;
   /** 本地别名（用户重命名），优先级高于 titles。 */
   localNames: Record<string, string>;
@@ -120,7 +120,8 @@ export function SessionSidebar({
 
   const titleOf = useCallback(
     (session: SessionSummaryDto): string =>
-      localNames[session.id] ?? titles[session.id] ?? session.id.slice(0, 18),
+      // 无标题事件 = 从未发过消息的空白会话，展示「新对话」而非裸 id 前缀。
+      localNames[session.id] ?? titles[session.id] ?? '新对话',
     [localNames, titles],
   );
 

@@ -369,6 +369,35 @@ export class HarnessService {
     return [...inspection.events];
   }
 
+  /** 批量读取会话标题（侧栏冷启动展示用）：最近 limit 个非子代理会话的
+   * session/title 事件折叠值；无标题事件的会话不出现在结果里。 */
+  async listSessionTitles(limit = 100): Promise<Record<string, string>> {
+    const ctx = this.ctx;
+    if (ctx === undefined) throw new Error('harness 尚未就绪');
+    const headers = (await ctx.sessionPersistence.list())
+      .filter((header) => header.origin !== 'subagent')
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
+    const results = await Promise.allSettled(
+      headers.map(async (header) => {
+        const inspection = await ctx.sessionPersistence.inspect(header.id);
+        let title = '';
+        for (const event of inspection.events) {
+          if (event.type !== 'session/title') continue;
+          const value = (event.data as { title?: unknown } | undefined)?.title;
+          if (typeof value === 'string' && value.length > 0) title = value;
+        }
+        return title.length > 0 ? ([header.id, title] as const) : undefined;
+      }),
+    );
+    const titles: Record<string, string> = {};
+    for (const result of results) {
+      if (result.status !== 'fulfilled' || result.value === undefined) continue;
+      titles[result.value[0]] = result.value[1];
+    }
+    return titles;
+  }
+
   /** 父会话的子代理目录（冷数据：持久化头 parentSession 过滤 + descriptor 标签）。 */
   async listSubagents(parentSessionId: string): Promise<SubagentRunDto[]> {
     const ctx = this.ctx;

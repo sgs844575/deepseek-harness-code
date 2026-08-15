@@ -76,6 +76,8 @@ export interface ElectronBridge {
     }>;
     open(sessionId: string): Promise<void>;
     list(): Promise<SessionSummaryDto[]>;
+    /** 批量读取会话标题（id → title；只含有标题的会话，供侧栏冷启动展示）。 */
+    titles(): Promise<Record<string, string>>;
     history(sessionId: string): Promise<SessionEventDto[]>;
     prompt(
       sessionId: string,
