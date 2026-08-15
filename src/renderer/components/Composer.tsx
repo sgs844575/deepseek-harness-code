@@ -1,10 +1,12 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 import type {
   AgentModeDto,
@@ -16,6 +18,7 @@ import type {
 } from '../../shared/protocol.js';
 import { requireBridge } from '../ipc/api';
 import { useProviders } from '../state/providers';
+import type { SettingsSectionId } from './SettingsView';
 
 export interface ComposerProps {
   disabled: boolean;
@@ -36,12 +39,16 @@ export interface ComposerProps {
   /** 活动会话是否已锁定预设（已开始对话；选择将降级为设默认）。 */
   presetLocked: boolean;
   onSelectPreset(presetId: string): void;
-  /** 打开设置（模型服务分区，模型菜单「管理模型」入口）。 */
-  onOpenSettings(section?: 'model'): void;
+  /** 打开设置（模型菜单「管理模型」/ 斜杠命令入口）。 */
+  onOpenSettings(section?: SettingsSectionId): void;
   onSend(text: string, mode: PromptModeDto): void | Promise<void>;
   onStop(): void | Promise<void>;
   onNewSession(): void;
   onExportSession(): void;
+  /** 派生当前会话（/派生 命令）。 */
+  onForkSession(): void;
+  /** 归档当前会话（/归档 命令；侧栏「已归档」可恢复）。 */
+  onArchiveSession(): void;
 }
 
 const TEXTAREA_MAX_HEIGHT = 220;
@@ -76,6 +83,18 @@ const EFFORT_OPTIONS: { value: ReasoningEffortDto; label: string }[] = [
 
 type MenuId = 'plus' | 'preset' | 'mode' | 'model' | 'effort' | 'msgsettings';
 
+/** 斜杠命令：/ 触发的本地快捷指令（不进入模型）。 */
+interface SlashCommand {
+  id: string;
+  /** 中文命令名（菜单显示 /new 这类前缀）。 */
+  label: string;
+  /** 拉丁别名（/new、/fork 这类输入直接匹配）。 */
+  alias: string;
+  hint: string;
+  icon: ReactNode;
+  run(): void;
+}
+
 /** tokens → 紧凑展示（12,345 / 1.2M）。 */
 function formatTokens(value: number): string {
   if (value >= 1_000_000 && value % 1_000_000 === 0) return `${value / 1_000_000}M`;
@@ -106,9 +125,14 @@ export function Composer({
   onStop,
   onNewSession,
   onExportSession,
+  onForkSession,
+  onArchiveSession,
 }: ComposerProps) {
   const [text, setText] = useState('');
   const [menu, setMenu] = useState<MenuId | null>(null);
+  /** 斜杠菜单：活动项下标 + 本次输入内的关闭标记（Esc/外点后不再弹出，改输入即复位）。 */
+  const [slashActive, setSlashActive] = useState(0);
+  const [slashDismissed, setSlashDismissed] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const { snapshot } = useProviders();
@@ -130,16 +154,137 @@ export function Composer({
     el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT)}px`;
   }, [text]);
 
-  // 任一菜单打开时：点击外部或 Esc 关闭。
+  /* 斜杠命令：输入以 / 开头（单行、无空格）时弹出；中文名与拉丁别名前缀匹配。 */
+  const slashCommands = useMemo<SlashCommand[]>(
+    () => [
+      {
+        id: 'new',
+        label: '新会话',
+        alias: 'new',
+        hint: '开始一段全新对话',
+        icon: <NewChatIcon />,
+        run: onNewSession,
+      },
+      {
+        id: 'fork',
+        label: '派生会话',
+        alias: 'fork',
+        hint: '以当前会话最近一个已完成回合为种子继续',
+        icon: <ForkIcon />,
+        run: onForkSession,
+      },
+      {
+        id: 'export',
+        label: '导出会话',
+        alias: 'export',
+        hint: '当前会话导出为 Markdown 文件',
+        icon: <ExportIcon />,
+        run: onExportSession,
+      },
+      {
+        id: 'archive',
+        label: '归档会话',
+        alias: 'archive',
+        hint: '从侧栏隐藏当前会话（「已归档」中可恢复）',
+        icon: <ArchiveIcon />,
+        run: onArchiveSession,
+      },
+      {
+        id: 'model',
+        label: '模型',
+        alias: 'model',
+        hint: '切换供应商与模型',
+        icon: <ModelIcon />,
+        run: () => setMenu('model'),
+      },
+      {
+        id: 'effort',
+        label: '思考强度',
+        alias: 'reasoning',
+        hint: '切换 reasoningEffort 档位',
+        icon: <BoltIcon />,
+        run: () => setMenu('effort'),
+      },
+      {
+        id: 'mode',
+        label: '权限模式',
+        alias: 'mode',
+        hint: '默认询问 / 完全访问 / 计划模式',
+        icon: <ModeIcon mode={agentMode} />,
+        run: () => setMenu('mode'),
+      },
+      ...(presets.length > 0
+        ? [{
+            id: 'preset',
+            label: 'Agent 预设',
+            alias: 'preset',
+            hint: '切换当前会话的预设组合',
+            icon: <PresetIcon />,
+            run: (): void => setMenu('preset'),
+          }]
+        : []),
+      {
+        id: 'mcp',
+        label: 'MCP 服务器',
+        alias: 'mcp',
+        hint: '管理 MCP 扩展与连接',
+        icon: <PlugIcon />,
+        run: () => onOpenSettings('mcp'),
+      },
+      {
+        id: 'settings',
+        label: '设置',
+        alias: 'settings',
+        hint: '打开应用设置',
+        icon: <GearIcon />,
+        run: () => onOpenSettings(),
+      },
+    ],
+    [
+      onNewSession,
+      onForkSession,
+      onExportSession,
+      onArchiveSession,
+      onOpenSettings,
+      agentMode,
+      presets.length,
+    ],
+  );
+
+  /** 本次输入是否处于斜杠态（Esc 关闭后同一段输入内不再弹出）。 */
+  const slashQuery =
+    !disabled && !slashDismissed && text.startsWith('/') && !text.includes(' ') && !text.includes('\n')
+      ? text.slice(1).toLowerCase()
+      : null;
+  const slashMatches =
+    slashQuery === null
+      ? []
+      : slashCommands.filter(
+          (command) => command.label.toLowerCase().startsWith(slashQuery) || command.alias.startsWith(slashQuery),
+        );
+  const slashOpen = slashQuery !== null && slashMatches.length > 0;
+  const slashIndex = Math.min(slashActive, slashMatches.length - 1);
+
+  // 输入变化即复位斜杠菜单的关闭标记与活动项。
   useEffect(() => {
-    if (menu === null) return;
+    setSlashDismissed(false);
+    setSlashActive(0);
+  }, [text]);
+
+  // 任一菜单（含斜杠命令）打开时：点击外部或 Esc 关闭。
+  useEffect(() => {
+    if (menu === null && !slashOpen) return;
     const onPointerDown = (event: PointerEvent): void => {
       if (rootRef.current !== null && !rootRef.current.contains(event.target as Node)) {
         setMenu(null);
+        setSlashDismissed(true);
       }
     };
     const onKeyDown = (event: globalThis.KeyboardEvent): void => {
-      if (event.key === 'Escape') setMenu(null);
+      if (event.key === 'Escape') {
+        setMenu(null);
+        setSlashDismissed(true);
+      }
     };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
@@ -147,7 +292,17 @@ export function Composer({
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [menu]);
+  }, [menu, slashOpen]);
+
+  const runSlashCommand = useCallback(
+    (command: SlashCommand) => {
+      setText('');
+      setMenu(null);
+      command.run();
+      textareaRef.current?.focus();
+    },
+    [],
+  );
 
   const submit = useCallback(() => {
     const value = text.trim();
@@ -160,12 +315,37 @@ export function Composer({
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      // 斜杠菜单打开时：↑↓ 选择，Enter/Tab 执行，Esc 收起（保留输入可继续编辑）。
+      if (slashOpen) {
+        const count = slashMatches.length;
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          setSlashActive((current) => (current + 1) % count);
+          return;
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          setSlashActive((current) => (current - 1 + count) % count);
+          return;
+        }
+        if ((event.key === 'Enter' || event.key === 'Tab') && !event.nativeEvent.isComposing) {
+          event.preventDefault();
+          const command = slashMatches[slashIndex];
+          if (command !== undefined) runSlashCommand(command);
+          return;
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setSlashDismissed(true);
+          return;
+        }
+      }
       if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
         event.preventDefault();
         submit();
       }
     },
-    [submit],
+    [slashOpen, slashMatches, slashIndex, runSlashCommand, submit],
   );
 
   const canSend = !disabled && text.trim().length > 0;
@@ -215,6 +395,30 @@ export function Composer({
   return (
     <div className="composer" ref={rootRef}>
       <div className={`composer__card${disabled ? ' composer__card--disabled' : ''}`}>
+        {slashOpen && (
+          <div className="composer__pop composer__slash" role="menu" aria-label="斜杠命令">
+            <div className="composer__pop-note">
+              命令——↑↓ 选择 · Enter 执行 · Esc 收起
+            </div>
+            {slashMatches.map((command, index) => (
+              <button
+                type="button"
+                role="menuitem"
+                key={command.id}
+                className={`composer__pop-item${index === slashIndex ? ' composer__pop-item--active' : ''}`}
+                onMouseEnter={() => setSlashActive(index)}
+                onClick={() => runSlashCommand(command)}
+              >
+                <span className="composer__pop-item-icon">{command.icon}</span>
+                <span className="composer__pop-item-main">
+                  <span className="composer__pop-item-title">/{command.label}</span>
+                  <span className="composer__pop-item-desc">{command.hint}</span>
+                </span>
+                <span className="composer__slash-alias">/{command.alias}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           className="composer__textarea"
@@ -831,6 +1035,62 @@ function ExportIcon() {
         d="M12 4v11m0 0 4-4m-4 4-4-4M5 19.5h14"
         stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+/** 新会话（撰写）：方框 + 斜置笔。 */
+function NewChatIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M19.5 11.2v6.3a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h6.3"
+        stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"
+      />
+      <path
+        d="M8.7 15.3l9.6-9.6a1.85 1.85 0 0 1 2.6 2.6l-9.6 9.6-3.6 1 1-3.6Z"
+        stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** 派生会话：一分二支线。 */
+function ForkIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="7" cy="5.5" r="2.2" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="17" cy="5.5" r="2.2" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="12" cy="18.5" r="2.2" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M7 7.7c0 4 1.5 6.3 4 8M17 7.7c0 4-1.5 6.3-4 8M7 7.7V11M17 7.7V11"
+        stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** 归档：收纳盒。 */
+function ArchiveIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M3.5 7h17M4.5 7l1.3-3h12.4L19.5 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5.5 7v11a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5V7" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M9.8 11.5h4.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** MCP 扩展：插头。 */
+function PlugIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M9 3.5v4M15 3.5v4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path
+        d="M6.5 7.5h11v3a5.5 5.5 0 0 1-11 0v-3Z"
+        stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"
+      />
+      <path d="M12 16v4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   );
 }

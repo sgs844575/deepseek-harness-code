@@ -532,6 +532,14 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
               onExportSession={() => {
                 if (activeId !== null) void handleExport(activeId);
               }}
+              onForkSession={() => {
+                if (activeId !== null) void handleFork(activeId);
+              }}
+              onArchiveSession={() => {
+                if (activeId === null) return;
+                archiveSessions([activeId]);
+                showNotice({ kind: 'ok', text: '已归档当前会话（侧栏「已归档」中可恢复）' });
+              }}
             />
           </>
         ) : (

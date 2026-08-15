@@ -2385,6 +2385,20 @@ select:focus-visible {
   min-width: 330px;
 }
 
+/* 斜杠命令面板：锚定输入卡片左缘，向上弹出 */
+.composer__slash {
+  left: 12px;
+  width: min(430px, calc(100% - 24px));
+}
+
+.composer__slash-alias {
+  flex-shrink: 0;
+  padding-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
 /* Agent 预设弹层：顶部空白/锁定提示 + 名单（order 排序，含自建预设） */
 .composer__pop--preset {
   min-width: 320px;
@@ -2500,6 +2514,11 @@ select:focus-visible {
 
 .composer__pop-item--active {
   color: var(--accent);
+}
+
+/* 斜杠菜单的键盘活动行：色相之外补整行填充，↑↓ 导航时一眼可辨 */
+.composer__slash .composer__pop-item--active {
+  background: var(--fill-active);
 }
 
 .composer__pop-item-icon {
