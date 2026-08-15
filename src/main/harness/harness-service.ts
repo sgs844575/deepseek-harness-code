@@ -92,6 +92,26 @@ const API_KEY_REF = 'DEEPSEEK_API_KEY';
 /** 子会话头 inspect 的兜底重试等待（header 与 start 事件的微小竞态）。 */
 const SUBAGENT_INSPECT_RETRY_MS = 120;
 
+/* ── 模块预热：boot 与 llm 两个动态 import 并行发起、进程内只做一次。
+ * 主进程组合根在模块加载期调用 preloadHarnessModules()，让 harness 树的
+ * 文件读取与 Electron 自身初始化（app ready / 窗口创建 / 设置读取）重叠，
+ * start() 只等待已预热的产物——启动路径上不再串行加载两个模块。 */
+let harnessModulesPromise: Promise<{ boot: BootFn; llm: LlmHelpers }> | undefined;
+
+export function preloadHarnessModules(harnessRoot: string): void {
+  if (harnessModulesPromise !== undefined) return;
+  const bootModuleUrl = pathToFileURL(
+    path.join(harnessRoot, 'packages', 'boot', 'app-boot', 'lib', 'index.js'),
+  ).href;
+  const llmModuleUrl = pathToFileURL(
+    path.join(harnessRoot, 'packages', 'llm', 'llm', 'lib', 'index.js'),
+  ).href;
+  harnessModulesPromise = Promise.all([
+    import(/* @vite-ignore */ bootModuleUrl) as Promise<{ boot: BootFn }>,
+    import(/* @vite-ignore */ llmModuleUrl) as Promise<LlmHelpers>,
+  ]).then(([bootModule, llm]) => ({ boot: bootModule.boot, llm }));
+}
+
 export class HarnessService {
   private ctx: HarnessContext | undefined;
   private llmHelpers: LlmHelpers | undefined;
@@ -177,17 +197,14 @@ export class HarnessService {
     this.setState({ status: 'booting', workspace: paths.workspace });
 
     try {
-      const bootModuleUrl = pathToFileURL(
-        path.join(paths.harnessRoot, 'packages', 'boot', 'app-boot', 'lib', 'index.js'),
-      ).href;
-      // 以绝对 file URL 动态加载，避免打包器解析 harness 内部依赖。
-      const bootModule = (await import(/* @vite-ignore */ bootModuleUrl)) as { boot: BootFn };
-      const llmModuleUrl = pathToFileURL(
-        path.join(paths.harnessRoot, 'packages', 'llm', 'llm', 'lib', 'index.js'),
-      ).href;
-      this.llmHelpers = (await import(/* @vite-ignore */ llmModuleUrl)) as LlmHelpers;
+      // 模块已预热（或此刻并行加载）：boot 与 llm 同时就位。
+      preloadHarnessModules(paths.harnessRoot);
+      const modules = await harnessModulesPromise;
+      if (modules === undefined) throw new Error('harness 模块预热失败');
+      this.llmHelpers = modules.llm;
+      const bootStartedAt = performance.now();
 
-      const ctx = await bootModule.boot(
+      const ctx = await modules.boot(
         'dsh-code',
         paths.configPath,
         // 应用设置驱动的动态组合（MCP 服务器 / 沙箱栈）以 boot 补丁注入，
@@ -203,6 +220,9 @@ export class HarnessService {
       this.interactions.attachLate(ctx, (dto) => this.emit(dto));
       this.ctx = ctx;
       this.attachEventBridge(ctx);
+      console.info(
+        `[harness] boot 完成，耗时 ${Math.round(performance.now() - bootStartedAt)}ms`,
+      );
       this.setState({ status: 'ready', error: undefined });
     } catch (error) {
       this.setState({

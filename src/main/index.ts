@@ -19,6 +19,8 @@ import {
   providersFilePath,
   resolveCacheDir,
 } from './paths/app-paths.js';
+import { preloadHarnessModules } from './harness/harness-service.js';
+import { resolveHarnessPaths } from './harness/paths.js';
 
 /**
  * 主进程组合根：只做模块组装与依赖注入，不含任何业务逻辑。
@@ -46,6 +48,10 @@ migrateLegacyUserData();
 const bootSettings = loadAppSettingsFile(appSettingsFilePath());
 if (!bootSettings.hardwareAcceleration) app.disableHardwareAcceleration();
 applyProxyEnv(bootSettings.httpProxy);
+
+// harness 模块预热：boot/llm 两个动态 import 并行发起，文件读取与
+// Electron 初始化（app ready / 窗口创建 / 设置副作用）重叠进行。
+preloadHarnessModules(resolveHarnessPaths().harnessRoot);
 
 // 未打包的 Windows 应用没有安装器登记的 AppUserModelId，系统通知会静默失败；
 // 用可执行文件路径作 AUMID 是 Electron 的通行做法。
