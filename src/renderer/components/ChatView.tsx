@@ -175,6 +175,28 @@ function RoundView({
   const toolCount = round.items.reduce((count, message) => count + message.tools.length, 0);
   const userText = round.user?.text ?? '';
 
+  /* 完成态折叠：最终回复 = 最后一条有正文的助手消息；其余产出（思考 /
+   * 工具 / 中间回复）收进默认折叠的过程块，任务结束只看结论（Codex 式）。
+   * 回合运行中或整轮无正文（如纯错误）时保持全量实时渲染。 */
+  const finalMessage = running
+    ? null
+    : ([...round.items].reverse().find(
+        (message) => message.role === 'assistant' && message.text.trim().length > 0,
+      ) ?? null);
+  const foldable =
+    finalMessage !== null &&
+    (round.items.length > 1 ||
+      finalMessage.reasoning.length > 0 ||
+      finalMessage.tools.length > 0);
+
+  const renderRow = (message: ChatMessage): ReactNode => (
+    <MessageRow
+      key={message.id}
+      message={message}
+      showReasoning={showThinking || firstReasoningId === message.id}
+    />
+  );
+
   return (
     <section className={`round${running ? ' round--running' : ''}`}>
       {round.user !== null && (
@@ -202,15 +224,36 @@ function RoundView({
             </span>
           )}
         </div>
-        <div className="round__body">
-          {round.items.map((message) => (
-            <MessageRow
-              key={message.id}
-              message={message}
-              showReasoning={showThinking || firstReasoningId === message.id}
-            />
-          ))}
-        </div>
+        {foldable ? (
+          <>
+            <details className="round__fold">
+              <summary>
+                <span className="round__fold-label">任务过程</span>
+                <span className="round__fold-summary">
+                  {toolCount > 0 ? `${toolCount} 次工具` : ''}
+                  {toolCount > 0 && replyCount > 1 ? ' · ' : ''}
+                  {replyCount > 1 ? `${replyCount} 段回复` : ''}
+                </span>
+                <span className="msg__reasoning-chevron" aria-hidden>
+                  <ChevronRightSmallIcon />
+                </span>
+              </summary>
+              <div className="round__body">
+                {round.items.map((message) =>
+                  message === finalMessage
+                    ? // 最终消息在折叠外单独展示正文；过程块里只留它的思考与工具。
+                      message.reasoning.length > 0 || message.tools.length > 0
+                      ? renderRow({ ...message, text: '' })
+                      : null
+                    : renderRow(message),
+                )}
+              </div>
+            </details>
+            {renderRow({ ...finalMessage, reasoning: '', tools: [] })}
+          </>
+        ) : (
+          <div className="round__body">{round.items.map(renderRow)}</div>
+        )}
       </div>
     </section>
   );
