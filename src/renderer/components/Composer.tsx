@@ -224,6 +224,14 @@ export function Composer({
           }]
         : []),
       {
+        id: 'rules',
+        label: '项目规则',
+        alias: 'rules',
+        hint: '编辑 AGENTS.md（全局 / 当前项目）',
+        icon: <RulesIcon />,
+        run: () => onOpenSettings('rules'),
+      },
+      {
         id: 'mcp',
         label: 'MCP 服务器',
         alias: 'mcp',
@@ -260,7 +268,8 @@ export function Composer({
     slashQuery === null
       ? []
       : slashCommands.filter(
-          (command) => command.label.toLowerCase().startsWith(slashQuery) || command.alias.startsWith(slashQuery),
+          // 中文按子串匹配（/规则 命中「项目规则」），拉丁别名保持前缀匹配。
+          (command) => command.label.toLowerCase().includes(slashQuery) || command.alias.startsWith(slashQuery),
         );
   const slashOpen = slashQuery !== null && slashMatches.length > 0;
   const slashIndex = Math.min(slashActive, slashMatches.length - 1);
@@ -1077,6 +1086,20 @@ function ArchiveIcon() {
       <path d="M3.5 7h17M4.5 7l1.3-3h12.4L19.5 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M5.5 7v11a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5V7" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
       <path d="M9.8 11.5h4.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** 项目规则：文档（AGENTS.md）。 */
+function RulesIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M6 3.5h8.2L19 8.3V20a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20V5A1.5 1.5 0 0 1 6.5 3.5Z"
+        stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"
+      />
+      <path d="M14 3.7V9h5" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M8.5 13h7M8.5 16.5h4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }

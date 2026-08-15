@@ -18,7 +18,7 @@ export interface SettingsViewProps {
   initialSection?: SettingsSectionId;
 }
 
-export type SettingsSectionId = 'general' | 'appearance' | 'model' | 'behavior' | 'mcp' | 'data';
+export type SettingsSectionId = 'general' | 'appearance' | 'model' | 'behavior' | 'rules' | 'mcp' | 'data';
 
 const NAV_GROUPS: { label: string; items: { id: SettingsSectionId; title: string }[] }[] = [
   {
@@ -31,7 +31,10 @@ const NAV_GROUPS: { label: string; items: { id: SettingsSectionId; title: string
   },
   {
     label: '行为',
-    items: [{ id: 'behavior', title: '交互行为' }],
+    items: [
+      { id: 'behavior', title: '交互行为' },
+      { id: 'rules', title: '项目规则' },
+    ],
   },
   {
     label: '扩展',
@@ -48,6 +51,7 @@ const SECTION_TITLES: Record<SettingsSectionId, string> = {
   appearance: '外观',
   model: '模型服务',
   behavior: '交互行为',
+  rules: '项目规则',
   mcp: 'MCP 服务器',
   data: '数据',
 };
@@ -122,6 +126,7 @@ export function SettingsView({ onClose, initialSection = 'general' }: SettingsVi
             {section === 'general' && <GeneralSection />}
             {section === 'appearance' && <AppearanceSection />}
             {section === 'behavior' && <BehaviorSection />}
+            {section === 'rules' && <RulesSection />}
             {section === 'data' && <DataSection />}
           </>
         )}
@@ -331,6 +336,126 @@ function DataSection() {
           {dataPending && <RelaunchButton />}
         </div>
       </section>
+    </div>
+  );
+}
+
+/* ─────────────────────────── 项目规则（AGENTS.md） ─────────────────────────── */
+
+/**
+ * 规则分区：全局（数据目录）与当前项目两层 AGENTS.md 编辑器。
+ * harness 会在每次会话启动时自动发现并按「全局 → 项目根 → 当前目录」
+ * 逐层合并注入（兼容 CLAUDE.md 与 *.local.md 变体），保存即对后续会话生效。
+ */
+function RulesSection() {
+  return (
+    <div className="settingspage__cards">
+      <section className="settingscard">
+        <RulesEditor
+          scope="global"
+          title="全局规则"
+          description="对所有项目生效的固定约定（编码规范、沟通偏好等）。"
+        />
+        <div className="settings-sep" />
+        <RulesEditor
+          scope="project"
+          title="项目规则"
+          description="仅对当前工作区生效（构建命令、目录约定、提交规范等）。"
+        />
+        <div className="settings-note">
+          Agent 在每次会话启动时按「全局 → 项目根 → 当前目录」逐层合并读取规则文件；
+          同目录下 AGENTS.md 优先，另兼容 CLAUDE.md 与 *.local.md 变体。全部规则合并上限
+          64 KiB，超出部分会被截断。修改对后续会话生效，进行中的会话不受影响。
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function RulesEditor({
+  scope,
+  title,
+  description,
+}: {
+  scope: 'global' | 'project';
+  title: string;
+  description: string;
+}) {
+  const [file, setFile] = useState<{ path: string; content: string } | null>(null);
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      const result = await requireBridge().app.readRules(scope);
+      setFile({ path: result.path, content: result.content });
+      setDraft(result.content);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [scope]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const dirty = file !== null && draft !== file.content;
+
+  const save = useCallback(async () => {
+    setError('');
+    try {
+      const result = await requireBridge().app.writeRules(scope, draft);
+      setFile({ path: result.path, content: result.content });
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2500);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [scope, draft]);
+
+  return (
+    <div className="settings-row settings-row--stack">
+      <div className="settings-row__main">
+        <div className="settings-row__title">
+          {title}
+          {file !== null && (
+            <span className={`settingspage__rules-badge${dirty ? '' : ' settingspage__rules-badge--on'}`}>
+              {dirty ? '未保存' : '已同步'}
+            </span>
+          )}
+        </div>
+        <div className="settings-row__desc">{description}</div>
+        <textarea
+          className="settingspage__rules-editor"
+          value={draft}
+          spellCheck={false}
+          placeholder={'# 用 Markdown 写下约定\n- 修改 JS 文件后运行 npm test\n- 提交信息使用中文'}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            // Ctrl/Cmd+S 保存（拦截浏览器默认保存对话框）。
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+              event.preventDefault();
+              if (dirty) void save();
+            }
+          }}
+        />
+        <div className="settings-row__inline">
+          <span className="settingspage__path" title={file?.path}>
+            {file?.path ?? '…'}
+          </span>
+          <button
+            type="button"
+            className="settingspage__save settingspage__save--primary"
+            disabled={!dirty}
+            onClick={() => void save()}
+          >
+            {saved ? '已保存' : '保存'}
+          </button>
+        </div>
+        {error.length > 0 && <div className="settings-row__desc settings-row__desc--accent">{error}</div>}
+      </div>
     </div>
   );
 }

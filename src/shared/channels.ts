@@ -15,6 +15,10 @@ export const channels = {
     pickFolder: 'app:pick-folder',
     /** 用系统默认浏览器打开外部链接（仅 https）。 */
     openExternal: 'app:open-external',
+    /** 读取 Agent 规则文件（AGENTS.md：global=数据目录 / project=当前工作区）。 */
+    readRules: 'app:read-rules',
+    /** 写入 Agent 规则文件（不存在则创建）。 */
+    writeRules: 'app:write-rules',
   },
   window: {
     minimize: 'window:minimize',

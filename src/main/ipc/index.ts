@@ -21,7 +21,7 @@ export interface IpcOptions {
  * 新增领域时，只需新建 xxx-handlers.ts 并在此挂载一行。
  */
 export function registerIpcHandlers({ harness, settings, providers, mcp }: IpcOptions): void {
-  registerAppHandlers();
+  registerAppHandlers(harness);
   registerWindowHandlers();
   registerHarnessHandlers(harness);
   registerAppSettingsHandlers(settings);

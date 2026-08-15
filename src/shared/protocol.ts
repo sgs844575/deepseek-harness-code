@@ -270,3 +270,17 @@ export interface PickDataPathResultDto {
   path?: string;
   error?: string;
 }
+
+/**
+ * Agent 规则文件（AGENTS.md）快照。
+ * harness 在会话启动时自动发现并合并：全局（数据目录/AGENTS.md）+
+ * 项目根到当前目录逐层 AGENTS.md（另兼容 CLAUDE.md 与 *.local.md 变体）。
+ */
+export interface AgentRulesDto {
+  scope: 'global' | 'project';
+  /** 文件绝对路径。 */
+  path: string;
+  /** 是否已存在（不存在时读取返回空内容，保存即创建）。 */
+  exists: boolean;
+  content: string;
+}

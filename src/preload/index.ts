@@ -28,6 +28,9 @@ const bridge: ElectronBridge = {
       ipcRenderer.invoke(channels.app.exportText, filename, content),
     pickFolder: () => ipcRenderer.invoke(channels.app.pickFolder),
     openExternal: (url: string) => ipcRenderer.invoke(channels.app.openExternal, url),
+    readRules: (scope: 'global' | 'project') => ipcRenderer.invoke(channels.app.readRules, scope),
+    writeRules: (scope: 'global' | 'project', content: string) =>
+      ipcRenderer.invoke(channels.app.writeRules, scope, content),
   },
   window: {
     minimize: () => ipcRenderer.invoke(channels.window.minimize),

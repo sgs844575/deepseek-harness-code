@@ -5,6 +5,7 @@
  */
 import type {
   AgentPresetDto,
+  AgentRulesDto,
   AppSettingsDto,
   HostStateDto,
   HarnessEventDto,
@@ -40,6 +41,10 @@ export interface ElectronBridge {
     pickFolder(): Promise<PickFolderResultDto>;
     /** 用系统默认浏览器打开外部链接（仅 https）。 */
     openExternal(url: string): Promise<void>;
+    /** 读取 Agent 规则文件（AGENTS.md；global=数据目录 / project=当前工作区）。 */
+    readRules(scope: 'global' | 'project'): Promise<AgentRulesDto>;
+    /** 写入 Agent 规则文件（不存在则创建；返回写后的快照）。 */
+    writeRules(scope: 'global' | 'project', content: string): Promise<AgentRulesDto>;
   };
   window: {
     minimize(): Promise<void>;

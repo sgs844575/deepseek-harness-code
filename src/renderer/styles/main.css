@@ -3358,6 +3358,63 @@ select:focus-visible {
   background: var(--accent-hover);
 }
 
+/* ---- 项目规则（AGENTS.md）编辑器 ---- */
+
+.settings-sep {
+  height: 1px;
+  margin: 4px 18px;
+  background: var(--hairline);
+}
+
+.settings-note {
+  padding: 10px 18px 14px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--faint);
+}
+
+.settingspage__rules-badge {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline-strong);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--warn);
+  vertical-align: 1px;
+}
+
+.settingspage__rules-badge--on {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 36%, transparent);
+}
+
+.settingspage__rules-editor {
+  display: block;
+  width: 100%;
+  min-height: 170px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-inset);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.13s ease;
+}
+
+.settingspage__rules-editor:focus {
+  border-color: color-mix(in srgb, var(--accent) 52%, transparent);
+}
+
+.settingspage__rules-editor::placeholder {
+  color: var(--faint);
+}
+
 .settingspage__message {
   font-size: 12px;
   color: var(--ok);
