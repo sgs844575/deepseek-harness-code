@@ -98,18 +98,32 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
 
   const refreshSessions = useCallback(async () => {
     try {
-      const bridge = requireBridge();
-      const list = await bridge.session.list();
+      const list = await requireBridge().session.list();
       setSessions(list);
-      // 冷启动标题：未加载过历史的会话在侧栏只显示 id 前缀，这里批量补齐。
-      void bridge.session
-        .titles()
-        .then((titles) => setSessionTitles(titles))
-        .catch((error) => console.error('读取会话标题失败', error));
     } catch (error) {
       console.error('读取会话列表失败', error);
     }
   }, []);
+
+  /* 冷会话标题补齐：只要会话 id 清单变化（冷启动就绪流 / 刷新 / 新会话落盘）
+   * 就批量拉取一次 session/title。原先只挂在 refreshSessions 里，而启动走
+   * begin() 的内联列表路径——未打开过的会话标题从未拉取，侧栏全显示回退名。 */
+  const titlesFetchedRef = useRef('');
+  useEffect(() => {
+    const signature = sessions.map((session) => session.id).join(',');
+    if (signature.length === 0 || signature === titlesFetchedRef.current) return;
+    titlesFetchedRef.current = signature;
+    let disposed = false;
+    void requireBridge()
+      .session.titles()
+      .then((titles) => {
+        if (!disposed) setSessionTitles((previous) => ({ ...previous, ...titles }));
+      })
+      .catch((error) => console.error('读取会话标题失败', error));
+    return () => {
+      disposed = true;
+    };
+  }, [sessions]);
 
   /** 预设名单 + roster 默认（宿主就绪 / 引擎重启后读取）。 */
   const refreshPresets = useCallback(async () => {
