@@ -349,7 +349,11 @@ export function SessionSidebar({
       onCancelEdit={() => setEditingId(null)}
       onExport={() => onExport(session.id)}
       onFork={() => onFork(session.id)}
-      onArchive={() => archiveSessions([session.id])}
+      onArchive={() => {
+        archiveSessions([session.id]);
+        // 归档的恰是当前打开的会话：切到新的空白会话，主区不再显示已归档对话。
+        if (session.id === activeId) onCreate();
+      }}
     />
   );
 

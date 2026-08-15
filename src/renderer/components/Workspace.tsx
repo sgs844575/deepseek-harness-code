@@ -29,7 +29,7 @@ import {
 import { setSessionName, useSessionNames } from '../state/sessionNames';
 import { buildSessionMarkdown, exportFileName } from '../state/sessionExport';
 import { useAppSettings } from '../state/appSettings';
-import { archiveSessions } from '../state/archivedSessions';
+import { archiveSessions, getArchivedSessions } from '../state/archivedSessions';
 import { getSessionLastActive, touchSessionActivity } from '../state/sessionActivity';
 
 /**
@@ -287,10 +287,14 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
           await createSession();
           return;
         }
-        // 当前工作区最近活跃的会话；无则新建（cwd 缺失视为当前工作区）。
+        // 当前工作区最近活跃的会话（已归档的不再自动打开——归档语义即从
+        // 日常视图隐去）；无则新建（cwd 缺失视为当前工作区）。
         const ws = state.workspace.toLowerCase();
+        const archived = getArchivedSessions();
         const own = list.filter(
-          (item) => (item.cwd ?? '').length === 0 || (item.cwd ?? '').toLowerCase() === ws,
+          (item) =>
+            !archived.has(item.id) &&
+            ((item.cwd ?? '').length === 0 || (item.cwd ?? '').toLowerCase() === ws),
         );
         if (own.length > 0) {
           const latest = [...own].sort(
@@ -599,8 +603,12 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
               }}
               onArchiveSession={() => {
                 if (activeId === null) return;
-                archiveSessions([activeId]);
+                const archivedId = activeId;
+                archiveSessions([archivedId]);
                 showNotice({ kind: 'ok', text: '已归档当前会话（侧栏「已归档」中可恢复）' });
+                // 归档的是当前会话：立即切到新的空白会话，避免主区继续
+                // 显示已归档对话（Codex 同款语义）。
+                if (activeIdRef.current === archivedId) void createSession();
               }}
             />
           </>
