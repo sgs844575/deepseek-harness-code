@@ -35,6 +35,7 @@ export const DEFAULT_APP_SETTINGS: AppSettingsDto = {
   archiveRetentionDays: 7,
   dataPath: '',
   projects: [],
+  sandboxEnabled: false,
 };
 
 const TERMINAL_SHELLS = new Set<TerminalShellDto>(['system', 'powershell', 'cmd', 'gitbash']);
@@ -115,6 +116,7 @@ export function normalizeAppSettings(raw: unknown): AppSettingsDto {
     archiveRetentionDays: clampRetentionDays(record.archiveRetentionDays),
     dataPath: typeof record.dataPath === 'string' ? record.dataPath : '',
     projects: normalizeProjects(record.projects),
+    sandboxEnabled: record.sandboxEnabled === true,
   };
 }
 

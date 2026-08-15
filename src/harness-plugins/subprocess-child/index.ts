@@ -281,9 +281,15 @@ function spawnManagedProcess(spec: SubprocessSpawnSpec): ManagedHandle {
   const outMode = spec.stdio.stdout;
   const errMode = spec.stdio.stderr;
 
+  const env = childEnv(spec.env);
+  // 沙箱 Windows ACL runner 以 [process.execPath, runner.js, ...] 起子进程；
+  // Electron 主进程下 execPath 是 electron.exe，必须切到 node 模式才能执行
+  // JS 入口（Chromium 子进程带 --process-type，不受该变量影响）。
+  if (program === process.execPath) env.ELECTRON_RUN_AS_NODE = '1';
+
   const child = spawn(program, args, {
     cwd: spec.cwd,
-    env: childEnv(spec.env),
+    env,
     stdio: [
       stdinMode === 'ignore' ? 'ignore' : 'pipe',
       outMode === 'inherit' ? 'inherit' : 'pipe',
