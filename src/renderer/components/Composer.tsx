@@ -30,6 +30,10 @@ export interface ComposerProps {
   onAgentModeChange(mode: AgentModeDto): void;
   /** 当前上下文占用（最近一次请求的 inputTokens；null = 尚无数据）。 */
   contextTokens: number | null;
+  /** 最近一次回复的输出规模（null = 尚无数据）。 */
+  lastOutputTokens?: number | null;
+  /** 会话累计输出 tokens。 */
+  totalOutputTokens?: number;
   /** Agent 预设名单（空数组 = 组合未启用 roster，隐藏选择器）。 */
   presets: AgentPresetDto[];
   /** 活动会话运行的预设 id（事件流 > 会话头 > 默认）。 */
@@ -115,6 +119,8 @@ export function Composer({
   agentMode,
   onAgentModeChange,
   contextTokens,
+  lastOutputTokens = null,
+  totalOutputTokens = 0,
   presets,
   activePresetId,
   defaultPresetId,
@@ -803,7 +809,7 @@ export function Composer({
             </div>
           </div>
           <div className="composer__right">
-            {/* 上下文占用圆环（Cherry 同款）：conic 渐变按占用插值着色，hover 展示详情 */}
+            {/* 上下文占用圆环（Cherry 同款）：conic 渐变按占用插值着色，hover 展示分类型用量 */}
             {contextPercentage !== null && (
               <div className="composer__ctxwrap" tabIndex={0} role="meter"
                 aria-label={`上下文占用 ${contextPercentage}%`}
@@ -828,6 +834,30 @@ export function Composer({
                     <span className="composer__ctxpop-model">
                       {activeModel?.name ?? activeModel?.id ?? defaultModel}
                     </span>
+                  </div>
+                  <div className="composer__ctxpop-stats">
+                    <div className="composer__ctxpop-stat">
+                      <span className="composer__ctxpop-key">本轮输入</span>
+                      <span className="composer__ctxpop-value">
+                        {contextTokens !== null ? formatTokens(contextTokens) : '—'}
+                      </span>
+                    </div>
+                    <div className="composer__ctxpop-stat">
+                      <span className="composer__ctxpop-key">本轮输出</span>
+                      <span className="composer__ctxpop-value">
+                        {lastOutputTokens !== null ? formatTokens(lastOutputTokens) : '—'}
+                      </span>
+                    </div>
+                    <div className="composer__ctxpop-stat">
+                      <span className="composer__ctxpop-key">累计输出</span>
+                      <span className="composer__ctxpop-value">
+                        {totalOutputTokens > 0 ? formatTokens(totalOutputTokens) : '—'}
+                      </span>
+                    </div>
+                    <div className="composer__ctxpop-stat">
+                      <span className="composer__ctxpop-key">上下文容量</span>
+                      <span className="composer__ctxpop-value">{formatTokens(contextMax)}</span>
+                    </div>
                   </div>
                 </div>
               </div>

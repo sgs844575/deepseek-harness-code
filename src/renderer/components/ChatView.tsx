@@ -262,10 +262,10 @@ function MessageRow({ message, showReasoning }: { message: ChatMessage; showReas
       {message.tools.map((tool) => (
         <ToolRow key={tool.callId} tool={tool} />
       ))}
-      {(message.usageText.length > 0 || message.text.length > 0) && (
+      {/* 用量不在此展示（避免刷屏）；分类型用量集中在输入区「上下文用量」详情。 */}
+      {message.text.length > 0 && (
         <div className="msg__footer">
-          {message.usageText.length > 0 && <span className="msg__usage">{message.usageText}</span>}
-          {message.text.length > 0 && <CopyButton text={message.text} />}
+          <CopyButton text={message.text} />
         </div>
       )}
     </div>

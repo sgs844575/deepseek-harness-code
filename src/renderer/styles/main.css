@@ -2347,7 +2347,7 @@ select:focus-visible {
   position: absolute;
   bottom: calc(100% + 8px);
   right: 0;
-  width: 248px;
+  width: 268px;
   padding: 10px 12px;
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-md);
@@ -2397,6 +2397,35 @@ select:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 分类型用量（本轮输入 / 本轮输出 / 累计输出 / 容量）：2×2 网格 */
+.composer__ctxpop-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px 14px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+.composer__ctxpop-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.composer__ctxpop-key {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.composer__ctxpop-value {
+  font-size: 11.5px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 /* 工具栏胶囊按钮（模式 / 模型 / 思考强度）与其弹出菜单（向上弹） */

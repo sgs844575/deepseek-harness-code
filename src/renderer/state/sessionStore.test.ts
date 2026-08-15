@@ -94,11 +94,22 @@ describe('sessionStore fold', () => {
       }, 1),
     ]);
     expect(base.contextTokens).toBe(1000);
+    expect(base.lastOutputTokens).toBe(50);
+    expect(base.totalOutputTokens).toBe(50);
     // 下一条消息没有 usage：保持上一值（不误清零）。
     const kept = foldEvent(base, event('assistant/message', {
       message: { id: 'a2', role: 'assistant', content: [{ type: 'text', text: '二' }], source: { kind: 'model' } },
     }, 2));
     expect(kept.contextTokens).toBe(1000);
+    expect(kept.lastOutputTokens).toBe(50);
+    expect(kept.totalOutputTokens).toBe(50);
+    // 再来一条带 usage：最近输出刷新，累计叠加。
+    const next = foldEvent(kept, event('assistant/message', {
+      message: { id: 'a3', role: 'assistant', content: [{ type: 'text', text: '三' }], source: { kind: 'model' } },
+      usage: { inputTokens: 1200, outputTokens: 30 },
+    }, 3));
+    expect(next.lastOutputTokens).toBe(30);
+    expect(next.totalOutputTokens).toBe(80);
     // 压缩后新请求的 inputTokens 回落（上下文变小）。
     const shrunk = foldEvent(kept, event('assistant/message', {
       message: { id: 'a3', role: 'assistant', content: [{ type: 'text', text: '三' }], source: { kind: 'model' } },

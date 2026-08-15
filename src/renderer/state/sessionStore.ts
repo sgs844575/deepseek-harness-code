@@ -49,12 +49,24 @@ export interface SessionUiState {
    * null = 尚无任何用量数据。输出区圆环 / 详情以此为分子。
    */
   contextTokens: number | null;
+  /** 最近一次回复的输出规模（outputTokens）；null = 尚无数据。 */
+  lastOutputTokens: number | null;
+  /** 会话累计输出 tokens（逐条 assistant/message 累加）。 */
+  totalOutputTokens: number;
   /** 会话运行的 Agent 预设 id（创建 priming 与 agent-preset/selected 事件 last-wins）。 */
   agentPreset?: string;
 }
 
 export function initialSessionState(): SessionUiState {
-  return { messages: [], running: false, title: '', todos: [], contextTokens: null };
+  return {
+    messages: [],
+    running: false,
+    title: '',
+    todos: [],
+    contextTokens: null,
+    lastOutputTokens: null,
+    totalOutputTokens: 0,
+  };
 }
 
 /* ──────────────────────────── 事件 data 的防御性收窄 ──────────────────────────── */
@@ -291,13 +303,24 @@ export function foldEvent(state: SessionUiState, event: SessionEventDto): Sessio
         usage !== undefined
           ? `↑${String(usage.inputTokens ?? 0)} ↓${String(usage.outputTokens ?? 0)} tokens`
           : '';
-      // 上下文统计：最近一次请求的 prompt 规模即当前上下文占用。
+      // 上下文统计：最近一次请求的 prompt 规模即当前上下文占用；
+      // 输出规模按类型记录（最近一轮 + 会话累计），供上下文用量详情展示。
       const inputTokens =
         usage !== undefined && Number.isFinite(usage.inputTokens)
           ? Number(usage.inputTokens)
           : null;
+      const outputTokens =
+        usage !== undefined && Number.isFinite(usage.outputTokens)
+          ? Number(usage.outputTokens)
+          : null;
       return mapLastAssistant(
-        { ...state, contextTokens: inputTokens ?? state.contextTokens },
+        {
+          ...state,
+          contextTokens: inputTokens ?? state.contextTokens,
+          lastOutputTokens: outputTokens ?? state.lastOutputTokens,
+          totalOutputTokens:
+            outputTokens !== null ? state.totalOutputTokens + outputTokens : state.totalOutputTokens,
+        },
         (existing) => ({
           ...existing,
           text: blocksText(message) || existing.text,

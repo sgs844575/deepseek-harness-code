@@ -525,6 +525,8 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
               agentMode={settings.agentMode}
               onAgentModeChange={(mode) => updateAppSettings({ agentMode: mode })}
               contextTokens={activeState?.contextTokens ?? null}
+              lastOutputTokens={activeState?.lastOutputTokens ?? null}
+              totalOutputTokens={activeState?.totalOutputTokens ?? 0}
               presets={presets}
               activePresetId={activePresetId}
               defaultPresetId={defaultPreset.length > 0 ? defaultPreset : undefined}
