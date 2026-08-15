@@ -8,7 +8,7 @@ import type {
   SubagentRunDto,
 } from '../../shared/protocol.js';
 import { requireBridge } from '../ipc/api';
-import { ChatView } from './ChatView';
+import { ChatView, EMPTY_SUGGESTIONS } from './ChatView';
 import { Composer } from './Composer';
 import { SessionSidebar } from './SessionSidebar';
 import { Splash } from './Splash';
@@ -58,8 +58,6 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
   const [host, setHost] = useState<HostStateDto | null>(null);
   /** 批量拉取的冷会话标题（未加载历史的会话侧栏展示用；live 事件覆盖）。 */
   const [sessionTitles, setSessionTitles] = useState<Record<string, string>>({});
-  /** 外部注入输入框的草稿（欢迎页建议卡）：token 推进时覆写并聚焦。 */
-  const [injectedDraft, setInjectedDraft] = useState<{ text: string; token: number }>({ text: '', token: 0 });
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -254,6 +252,28 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
     },
     [host, createSession, switchProject],
   );
+
+  /** 新会话项目选择器「选择文件夹…」：系统目录对话框选任意地址，
+   * 注册为项目（同路径覆盖改名）并在其中新建会话。 */
+  const pickProjectFolder = useCallback(async () => {
+    try {
+      const result = await requireBridge().app.pickFolder();
+      if (result.canceled || result.path === undefined || result.path.length === 0) return;
+      const path = result.path;
+      const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+      const key = path.toLowerCase();
+      const next = settings.projects.filter((project) => project.path.toLowerCase() !== key);
+      next.push({ path, name });
+      updateAppSettings({ projects: next });
+      createSessionIn(path);
+    } catch (error) {
+      console.error('选择项目文件夹失败', error);
+      showNotice({
+        kind: 'error',
+        text: `选择项目文件夹失败：${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  }, [settings.projects, updateAppSettings, createSessionIn, showNotice]);
 
   // 宿主就绪流：首次启动 / 项目切换 / 引擎重启后，刷新列表并打开目标会话
   // （切换前点击的其他项目会话 > 当前工作区最近会话 > 新建）。
@@ -538,6 +558,10 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
     [subagents, activeId],
   );
 
+  /** 活动会话是否空白（无消息且未运行）：新会话视图（输入卡居中 + 项目选择器）。 */
+  const sessionBlank =
+    (activeState?.messages.length ?? 0) === 0 && !(activeState?.running ?? false);
+
   return (
     <div className="workspace">
       <SessionSidebar
@@ -563,10 +587,10 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
         onSwitchProject={(cwd) => void switchProject(cwd)}
         onOpenSettings={onOpenSettings}
       />
-      <div className="workspace__main">
+      <div className={`workspace__main${sessionBlank ? ' workspace__main--blank' : ''}`}>
         {hostReady ? (
           <>
-            {settings.showTodos && <TodoPanel todos={activeState?.todos ?? []} />}
+            {settings.showTodos && !sessionBlank && <TodoPanel todos={activeState?.todos ?? []} />}
             {notice !== null && <div className={`notice notice--${notice.kind}`}>{notice.text}</div>}
             <ChatView
               state={activeState ?? initialSessionState()}
@@ -575,9 +599,6 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
               subagents={activeSubagents}
               childStates={states}
               workspaceName={baseName(host?.workspace ?? '')}
-              onPickSuggestion={(prompt) =>
-                setInjectedDraft((previous) => ({ text: prompt, token: previous.token + 1 }))
-              }
             />
             {pendingApproval !== null && (
               <ApprovalCard approval={pendingApproval} onRespond={(id, outcome) => void handleApproval(id, outcome)} />
@@ -604,9 +625,10 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
               onOpenSettings={onOpenSettings}
               onSend={handleSend}
               onStop={handleStop}
-              injectedDraft={injectedDraft}
+              suggestions={EMPTY_SUGGESTIONS}
               onNewSession={() => void createSession()}
               onNewSessionIn={createSessionIn}
+              onPickProjectFolder={() => void pickProjectFolder()}
               projects={settings.projects}
               workspace={host?.workspace ?? ''}
               onExportSession={() => {

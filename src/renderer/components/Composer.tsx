@@ -56,16 +56,15 @@ export interface ComposerProps {
   onNewSession(): void;
   /** 在指定项目（工作区）新建会话：非当前项目时先切换工作区，就绪后自动创建。 */
   onNewSessionIn(projectPath: string): void;
-  /** 已注册项目列表（＋菜单「在项目中新建会话」）。 */
+  /** 「选择文件夹…」：系统目录选择器选任意地址，注册为项目并切过去新建会话。 */
+  onPickProjectFolder(): void;
+  /** 已注册项目列表（新会话项目选择器）。 */
   projects: ProjectEntryDto[];
   /** 当前工作区路径（标记「当前」徽标）。 */
   workspace: string;
   onExportSession(): void;
-  /**
-   * 外部注入草稿（欢迎页建议卡）：token 变化时覆写输入框并聚焦。
-   * 与用户键入互不干扰——仅 token 推进才覆写。
-   */
-  injectedDraft?: { text: string; token: number };
+  /** 新会话建议卡（空白会话时渲染在输入卡下方；点击填入输入框）。 */
+  suggestions?: { icon: ReactNode; label: string; prompt: string }[];
   /** 派生当前会话（/派生 命令）。 */
   onForkSession(): void;
   /** 归档当前会话（/归档 命令；侧栏「已归档」可恢复）。 */
@@ -158,10 +157,11 @@ export function Composer({
   onStop,
   onNewSession,
   onNewSessionIn,
+  onPickProjectFolder,
   projects,
   workspace,
   onExportSession,
-  injectedDraft,
+  suggestions,
   onForkSession,
   onArchiveSession,
 }: ComposerProps) {
@@ -192,15 +192,6 @@ export function Composer({
     el.style.height = '0px';
     el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT)}px`;
   }, [text]);
-
-  // 外部注入草稿（欢迎页建议卡）：token 推进时覆写并聚焦输入框。
-  const injectedToken = injectedDraft?.token ?? 0;
-  useEffect(() => {
-    if (injectedToken === 0) return;
-    setText(injectedDraft?.text ?? '');
-    textareaRef.current?.focus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [injectedToken]);
 
   /* 斜杠命令：输入以 / 开头（单行、无空格）时弹出；中文名与拉丁别名前缀匹配。 */
   const slashCommands = useMemo<SlashCommand[]>(
@@ -506,6 +497,80 @@ export function Composer({
 
   return (
     <div className="composer" ref={rootRef}>
+      {/* 项目归属（空白会话专属，输入卡上方）：选择新会话所在项目；开始
+       * 对话后归属锁定（会话历史绑定工作区），选择器随之消失。 */}
+      {!presetLocked && (
+        <div className="composer__project">
+          <div className="composer__pillwrap">
+            <button
+              type="button"
+              className={`composer__project-pill${menu === 'project' ? ' composer__project-pill--open' : ''}`}
+              title={`新会话所在项目：${currentProjectName}（开始对话后锁定归属）`}
+              aria-expanded={menu === 'project'}
+              onClick={() => setMenu((current) => (current === 'project' ? null : 'project'))}
+            >
+              <FolderPillIcon />
+              <span className="composer__project-name">{currentProjectName}</span>
+              <ChevronDownIcon />
+            </button>
+            {menu === 'project' && (
+              <div className="composer__pop composer__pop--down" role="menu" aria-label="选择项目">
+                <div className="composer__pop-note">
+                  新会话将创建在所选项目；开始对话后归属锁定，不可再切换。
+                </div>
+                {projectOptions.map((project) => {
+                  const current =
+                    workspace.length > 0 &&
+                    project.path.toLowerCase() === workspace.toLowerCase();
+                  return (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      key={project.path}
+                      className={`composer__pop-item${current ? ' composer__pop-item--active' : ''}`}
+                      title={project.path}
+                      onClick={() => {
+                        setMenu(null);
+                        if (!current) onNewSessionIn(project.path);
+                      }}
+                    >
+                      <span className="composer__pop-item-icon"><FolderPillIcon /></span>
+                      <span className="composer__pop-item-main">
+                        <span className="composer__pop-item-title">
+                          {project.name}
+                          {current && (
+                            <span className="composer__pop-group-badge">当前</span>
+                          )}
+                        </span>
+                        <span className="composer__pop-item-id">{project.path}</span>
+                      </span>
+                      {current && <span className="composer__pop-check"><CheckIcon /></span>}
+                    </button>
+                  );
+                })}
+                <div className="composer__pop-sep" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="composer__pop-item"
+                  onClick={() => {
+                    setMenu(null);
+                    onPickProjectFolder();
+                  }}
+                >
+                  <span className="composer__pop-item-icon"><FolderOpenPillIcon /></span>
+                  <span className="composer__pop-item-main">
+                    <span className="composer__pop-item-title">选择文件夹…</span>
+                    <span className="composer__pop-item-desc">
+                      打开系统对话框选择任意目录，注册为项目并新建会话
+                    </span>
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <div className={`composer__card${disabled ? ' composer__card--disabled' : ''}`}>
         {slashOpen && (
           <div className="composer__pop composer__slash" role="menu" aria-label="斜杠命令">
@@ -573,61 +638,6 @@ export function Composer({
         />
         <div className="composer__toolbar">
           <div className="composer__left">
-            {/* 项目归属（空白会话专属）：选择新会话所在项目；开始对话后
-             * 归属锁定（会话历史绑定工作区），选择器随之消失。 */}
-            {!presetLocked && projectOptions.length > 0 && (
-              <div className="composer__pillwrap">
-                <button
-                  type="button"
-                  className={`composer__pill${menu === 'project' ? ' composer__pill--open' : ''}`}
-                  title={`新会话所在项目：${currentProjectName}（开始对话后锁定归属）`}
-                  aria-expanded={menu === 'project'}
-                  onClick={() => setMenu((current) => (current === 'project' ? null : 'project'))}
-                >
-                  <FolderPillIcon />
-                  <span className="composer__pill-label">{currentProjectName}</span>
-                  <ChevronDownIcon />
-                </button>
-                {menu === 'project' && (
-                  <div className="composer__pop" role="menu" aria-label="选择项目">
-                    <div className="composer__pop-note">
-                      新会话将创建在所选项目；开始对话后归属锁定，不可再切换。
-                    </div>
-                    {projectOptions.map((project) => {
-                      const current =
-                        workspace.length > 0 &&
-                        project.path.toLowerCase() === workspace.toLowerCase();
-                      return (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          key={project.path}
-                          className={`composer__pop-item${current ? ' composer__pop-item--active' : ''}`}
-                          title={project.path}
-                          onClick={() => {
-                            setMenu(null);
-                            if (!current) onNewSessionIn(project.path);
-                          }}
-                        >
-                          <span className="composer__pop-item-icon"><FolderPillIcon /></span>
-                          <span className="composer__pop-item-main">
-                            <span className="composer__pop-item-title">
-                              {project.name}
-                              {current && (
-                                <span className="composer__pop-group-badge">当前</span>
-                              )}
-                            </span>
-                            <span className="composer__pop-item-id">{project.path}</span>
-                          </span>
-                          {current && <span className="composer__pop-check"><CheckIcon /></span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* ＋ 更多操作 */}
             <div className="composer__pillwrap">
               <button
@@ -1064,6 +1074,30 @@ export function Composer({
           </div>
         </div>
       </div>
+
+      {/* 新会话建议卡（输入卡下方一行，Codex 式）：点击填入输入框；
+          开始对话后随项目选择器一起消失。 */}
+      {!presetLocked && suggestions !== undefined && suggestions.length > 0 && (
+        <div className="composer__suggestions">
+          {suggestions.map((suggestion) => (
+            <button
+              type="button"
+              key={suggestion.label}
+              className="composer__suggest"
+              title={suggestion.prompt}
+              onClick={() => {
+                setText(suggestion.prompt);
+                textareaRef.current?.focus();
+              }}
+            >
+              <span className="composer__suggest-icon" aria-hidden>
+                {suggestion.icon}
+              </span>
+              <span className="composer__suggest-label">{suggestion.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1214,6 +1248,22 @@ function FolderPillIcon() {
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
         d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.2h7a2 2 0 0 1 2 2v8.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-11Z"
+        stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** 打开的文件夹（「选择文件夹…」入口）。 */
+function FolderOpenPillIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.2h7a2 2 0 0 1 2 2v1.3"
+        stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"
+      />
+      <path
+        d="M3.5 9.5v8.7a1.6 1.6 0 0 0 1.9 1.6l12.4-2.3a1.6 1.6 0 0 0 1.3-1.6v-4.4a1.6 1.6 0 0 0-1.9-1.6L6.7 9.7a1.6 1.6 0 0 1-1.2-.4L4 8"
         stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"
       />
     </svg>

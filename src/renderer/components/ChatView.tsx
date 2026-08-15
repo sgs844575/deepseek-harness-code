@@ -41,8 +41,9 @@ export function groupRounds(messages: ChatMessage[]): ChatRound[] {
   return rounds;
 }
 
-/** 空会话建议卡（Codex 式欢迎页）：点击把提示词填入输入框。 */
-const EMPTY_SUGGESTIONS: { icon: ReactNode; label: string; prompt: string }[] = [
+/** 空会话建议卡（Codex 式新会话视图）：点击把提示词填入输入框。
+ * 由 Workspace 传给 Composer，渲染在输入卡下方。 */
+export const EMPTY_SUGGESTIONS: { icon: ReactNode; label: string; prompt: string }[] = [
   {
     icon: <SuggestProjectIcon />,
     label: '解读这个项目',
@@ -72,7 +73,6 @@ export function ChatView({
   subagents = [],
   childStates = {},
   workspaceName = '',
-  onPickSuggestion,
 }: {
   state: SessionUiState;
   hostReady: boolean;
@@ -83,8 +83,6 @@ export function ChatView({
   childStates?: Record<string, SessionUiState>;
   /** 当前工作区目录名（欢迎页展示）。 */
   workspaceName?: string;
-  /** 点击欢迎页建议卡：把提示词注入输入框。 */
-  onPickSuggestion?(prompt: string): void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -101,31 +99,12 @@ export function ChatView({
           <div className="chat__welcome">
             {hostReady ? (
               <>
-                <div className="chat__welcome-mark" aria-hidden>
-                  <LogoGlyph />
-                </div>
                 <h1 className="chat__welcome-title">有什么可以帮忙的？</h1>
                 <p className="chat__welcome-sub">
                   {workspaceName.length > 0
                     ? `DeepSeek agent 将在项目「${workspaceName}」中读取文件、编辑代码并执行命令`
                     : 'DeepSeek agent 会读取文件、编辑代码并执行命令，描述任务即可开始'}
                 </p>
-                <div className="chat__welcome-grid">
-                  {EMPTY_SUGGESTIONS.map((suggestion) => (
-                    <button
-                      type="button"
-                      key={suggestion.label}
-                      className="chat__welcome-card"
-                      onClick={() => onPickSuggestion?.(suggestion.prompt)}
-                    >
-                      <span className="chat__welcome-card-icon" aria-hidden>
-                        {suggestion.icon}
-                      </span>
-                      <span className="chat__welcome-card-label">{suggestion.label}</span>
-                      <span className="chat__welcome-card-hint">{suggestion.prompt}</span>
-                    </button>
-                  ))}
-                </div>
               </>
             ) : (
               <p className="chat__welcome-sub">正在连接 harness…</p>
@@ -472,26 +451,6 @@ function DiffBlock({ diff }: { diff: EditDiffView }) {
 }
 
 /* ---- 内联 SVG 图标 ---- */
-
-/** 欢迎页 Logo 记号（与启动页同语言：圆环 + 双尖角）。 */
-function LogoGlyph() {
-  return (
-    <svg width="44" height="44" viewBox="0 0 128 128" fill="none" aria-hidden>
-      <defs>
-        <linearGradient id="chat-welcome-grad" x1="12" y1="8" x2="116" y2="120" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stop-color="#4d7cff" />
-          <stop offset="1" stop-color="#0b49c8" />
-        </linearGradient>
-      </defs>
-      <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#chat-welcome-grad)" />
-      <circle cx="64" cy="64" r="32" stroke="#ffffff" stroke-opacity="0.9" stroke-width="6" stroke-linecap="round" />
-      <g stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M56 51 44 64l12 13" />
-        <path d="M72 51l12 13-12 13" />
-      </g>
-    </svg>
-  );
-}
 
 /** 建议卡图标（线性，与整体图标语言一致）。 */
 function SuggestProjectIcon() {
