@@ -72,7 +72,7 @@ export interface ComposerProps {
   onArchiveSession(): void;
 }
 
-const TEXTAREA_MAX_HEIGHT = 220;
+const TEXTAREA_MAX_HEIGHT = 320;
 
 /** 单条消息允许携带的附件数（与主进程 ATTACHMENT_MAX_COUNT 一致）。 */
 const ATTACHMENTS_MAX = 8;

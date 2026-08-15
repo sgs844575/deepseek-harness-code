@@ -2320,7 +2320,7 @@ select:focus-visible {
   display: block;
   width: 100%;
   min-height: 27px;
-  max-height: 220px;
+  max-height: 320px;
   resize: none;
   border: none;
   outline: none;
@@ -2343,15 +2343,19 @@ select:focus-visible {
 
 .composer__toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  row-gap: 4px;
   padding: 7px 10px 10px;
 }
 
 .composer__left {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  row-gap: 4px;
   min-width: 0;
 }
 
