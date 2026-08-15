@@ -8,6 +8,7 @@ import type {
   AutomationScheduleDto,
   ProjectEntryDto,
   TerminalShellDto,
+  UserPluginDto,
 } from '../../shared/protocol.js';
 
 /**
@@ -38,6 +39,7 @@ export const DEFAULT_APP_SETTINGS: AppSettingsDto = {
   archiveRetentionDays: 7,
   dataPath: '',
   projects: [],
+  plugins: [],
   automations: [],
   sandboxEnabled: false,
 };
@@ -89,6 +91,31 @@ function normalizeProjects(raw: unknown): ProjectEntryDto[] {
     byPath.set(target.toLowerCase(), { path: target, name });
   }
   return [...byPath.values()];
+}
+
+/** 自定义插件归一化：入口必须是 .js/.cjs/.mjs 的绝对路径、name 兜底入口
+ * 文件名、按入口路径（小写）去重（上限 20 个）。 */
+function normalizeUserPlugins(raw: unknown): UserPluginDto[] {
+  if (!Array.isArray(raw)) return [];
+  const byEntry = new Map<string, UserPluginDto>();
+  for (const item of raw.slice(0, 20)) {
+    if (typeof item !== 'object' || item === null) continue;
+    const record = item as Record<string, unknown>;
+    if (typeof record.entryPath !== 'string' || record.entryPath.trim().length === 0) continue;
+    const entryPath = path.resolve(record.entryPath.trim());
+    if (!/\.(js|cjs|mjs)$/i.test(entryPath)) continue;
+    const name =
+      typeof record.name === 'string' && record.name.trim().length > 0
+        ? record.name.trim().slice(0, 60)
+        : pathBasename(path.dirname(entryPath));
+    byEntry.set(entryPath.toLowerCase(), {
+      id: typeof record.id === 'string' && record.id.length > 0 ? record.id : randomUUID(),
+      name,
+      entryPath,
+      enabled: record.enabled !== false,
+    });
+  }
+  return [...byEntry.values()];
 }
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -170,6 +197,7 @@ export function normalizeAppSettings(raw: unknown): AppSettingsDto {
     archiveRetentionDays: clampRetentionDays(record.archiveRetentionDays),
     dataPath: typeof record.dataPath === 'string' ? record.dataPath : '',
     projects: normalizeProjects(record.projects),
+    plugins: normalizeUserPlugins(record.plugins),
     automations: normalizeAutomations(record.automations),
     sandboxEnabled: record.sandboxEnabled === true,
   };

@@ -122,6 +122,18 @@ export const channels = {
     /** 主进程 → 渲染层：列表变更推送。 */
     changed: 'mcp:changed',
   },
+  plugins: {
+    /** 插件状态快照（内置 + 自定义）。 */
+    getAll: 'plugins:get-all',
+    /** 新增 / 编辑自定义插件（入口 JS 路径）。 */
+    upsert: 'plugins:upsert',
+    /** 删除自定义插件。 */
+    remove: 'plugins:remove',
+    /** 启停自定义插件（不改其余字段）。 */
+    setEnabled: 'plugins:set-enabled',
+    /** 应用变更：harness 停机并以新组合重启。 */
+    apply: 'plugins:apply',
+  },
 } as const;
 
 export type AppChannel = (typeof channels.app)[keyof typeof channels.app];
@@ -135,6 +147,7 @@ export type SettingsChannel = (typeof channels.settings)[keyof typeof channels.s
 export type ProviderChannel = (typeof channels.providers)[keyof typeof channels.providers];
 export type AppSettingsChannel = (typeof channels.appSettings)[keyof typeof channels.appSettings];
 export type McpChannel = (typeof channels.mcp)[keyof typeof channels.mcp];
+export type PluginChannel = (typeof channels.plugins)[keyof typeof channels.plugins];
 
 /** 全部合法通道的字面量联合，供校验使用。 */
 export type IpcChannel =
@@ -148,4 +161,5 @@ export type IpcChannel =
   | SettingsChannel
   | ProviderChannel
   | AppSettingsChannel
-  | McpChannel;
+  | McpChannel
+  | PluginChannel;

@@ -15,6 +15,7 @@ import type {
   PickDataPathResultDto,
   PickFilesResultDto,
   PickFolderResultDto,
+  PluginSnapshotDto,
   PromptAttachmentDto,
   PromptModeDto,
   ProviderDto,
@@ -26,6 +27,8 @@ import type {
   SessionEventDto,
   SessionSummaryDto,
   SubagentRunDto,
+  UserPluginDto,
+  UserPluginUpsertDto,
 } from './protocol.js';
 
 export interface ElectronBridge {
@@ -156,5 +159,15 @@ export interface ElectronBridge {
     apply(): Promise<HostStateDto>;
     /** 订阅列表变更推送；返回取消订阅函数。 */
     onChanged(listener: (servers: McpServerDto[]) => void): () => void;
+  };
+  plugins: {
+    /** 插件状态快照（内置 + 自定义）。 */
+    getAll(): Promise<PluginSnapshotDto>;
+    /** 新增（无 id）或编辑（有 id）自定义插件（入口 JS 路径）。 */
+    upsert(input: UserPluginUpsertDto): Promise<UserPluginDto>;
+    remove(id: string): Promise<void>;
+    setEnabled(id: string, enabled: boolean): Promise<void>;
+    /** 应用变更：harness 以新组合重启（返回重启后宿主状态）。 */
+    apply(): Promise<HostStateDto>;
   };
 }

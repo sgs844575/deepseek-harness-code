@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { McpServerRecord } from '../mcp/mcp-store.js';
 
 /**
@@ -24,11 +25,15 @@ export interface LoaderEntry {
   config?: unknown;
 }
 
-/** 组合输入：MCP 服务器记录 + 沙箱开关 + 工作区根。 */
+/** 组合输入：MCP 服务器记录 + 沙箱开关 + 工作区根 + 自定义插件。 */
 export interface BootCompositionInput {
   mcpServers: McpServerRecord[];
   sandbox: boolean;
   workspaceRoot: string;
+  /** 自定义 harness 插件（启用项注入组合；相对组合目录定位）。 */
+  userPlugins: { id: string; entryPath: string }[];
+  /** 组合文件所在目录（自定义插件入口换算相对路径的基准）。 */
+  configDir: string;
 }
 
 /** cordis.yml 同款的 harness 插件相对路径（基于配置目录）。 */
@@ -81,10 +86,30 @@ export function sandboxPatches(workspaceRoot: string): LoaderPatch[] {
   ];
 }
 
-/** 构建完整 boot 补丁列表（顺序：沙箱换行 → MCP 追加行）。 */
+/** 自定义插件 → 组合行：入口换算成相对组合目录的加载路径（与 cordis.yml
+ * 同风格）。跨盘（Windows 不同卷）时 path.relative 返回绝对路径，加载器
+ * 无法消费——直接抛错，调用方在保存期就拦下。 */
+export function userPluginEntry(
+  plugin: { id: string; entryPath: string },
+  configDir: string,
+): LoaderEntry {
+  const relative = path.relative(configDir, plugin.entryPath).split(path.sep).join('/');
+  if (path.isAbsolute(relative)) {
+    throw new Error(
+      `插件入口与组合目录不在同一磁盘分区，无法挂载：${plugin.entryPath}`,
+    );
+  }
+  return { id: `user-${plugin.id}`, name: relative };
+}
+
+/** 构建完整 boot 补丁列表（顺序：沙箱换行 → 自定义插件追加 → MCP 追加行）。 */
 export function buildBootPatches(input: BootCompositionInput): LoaderPatch[] {
   const patches: LoaderPatch[] = [];
   if (input.sandbox) patches.push(...sandboxPatches(input.workspaceRoot));
+  const pluginEntries = input.userPlugins.map((plugin) =>
+    userPluginEntry(plugin, input.configDir),
+  );
+  if (pluginEntries.length > 0) patches.push({ insert: pluginEntries });
   const entries = input.mcpServers.map(mcpServerEntry);
   if (entries.length > 0) patches.push({ insert: entries });
   return patches;

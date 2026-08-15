@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBootPatches, mcpServerEntry, sandboxPatches } from './composition.js';
+import { buildBootPatches, mcpServerEntry, sandboxPatches, userPluginEntry } from './composition.js';
 import type { McpServerRecord } from '../mcp/mcp-store.js';
 
 /** 最小 MCP 记录构造（仅 composition 消费的字段）。 */
@@ -21,7 +21,15 @@ function server(partials: Partial<McpServerRecord>): McpServerRecord {
 
 describe('buildBootPatches', () => {
   it('无 MCP 且沙箱关闭时不产生补丁', () => {
-    expect(buildBootPatches({ mcpServers: [], sandbox: false, workspaceRoot: 'D:/ws' })).toEqual([]);
+    expect(
+      buildBootPatches({
+        mcpServers: [],
+        sandbox: false,
+        workspaceRoot: 'D:/ws',
+        userPlugins: [],
+        configDir: 'D:/app/resources/config/harness',
+      }),
+    ).toEqual([]);
   });
 
   it('每台启用的 MCP 服务器渲染为一行 mcp-client 插件（stdio）', () => {
@@ -38,6 +46,8 @@ describe('buildBootPatches', () => {
       ],
       sandbox: false,
       workspaceRoot: 'D:/ws',
+      userPlugins: [],
+      configDir: 'D:/app/resources/config/harness',
     });
     expect(patches).toEqual([
       {
@@ -57,6 +67,17 @@ describe('buildBootPatches', () => {
         ],
       },
     ]);
+  });
+
+  it('自定义插件渲染为相对组合目录的组合行（user- 前缀 id）', () => {
+    const entry = userPluginEntry(
+      { id: 'abc', entryPath: 'D:/app/plugins/my-plugin/lib/index.js' },
+      'D:/app/resources/config/harness',
+    );
+    expect(entry).toEqual({
+      id: 'user-abc',
+      name: '../../../plugins/my-plugin/lib/index.js',
+    });
   });
 
   it('streamable-http 形态输出 url/headers，不含 stdio 字段', () => {

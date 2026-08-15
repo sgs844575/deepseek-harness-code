@@ -2175,6 +2175,49 @@ select:focus-visible {
   border-color: color-mix(in srgb, var(--warn) 40%, var(--hairline));
 }
 
+/* ---- 插件设置（内置组合行状态 chips + 自定义插件行） ---- */
+
+.plugin-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 4px;
+}
+
+.plugin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.plugin-chip__name {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg);
+}
+
+.plugin-chip__status {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.plugin-chip__status--loaded {
+  color: var(--ok);
+}
+
+.plugin-chip__status--disabled {
+  color: var(--warn);
+}
+
+.plugin-chip__status--error {
+  color: var(--danger);
+}
+
 .mcp-form {
   display: flex;
   flex-direction: column;

@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { app } from 'electron';
 import { WindowManager } from './windows/window-manager.js';
 import { HarnessService } from './harness/harness-service.js';
@@ -12,6 +13,7 @@ import { ProviderStore } from './providers/provider-store.js';
 import { ProviderService } from './providers/provider-service.js';
 import { McpStore } from './mcp/mcp-store.js';
 import { McpService } from './mcp/mcp-service.js';
+import { PluginService } from './plugins/plugin-service.js';
 import {
   appSettingsFilePath,
   mcpServersFilePath,
@@ -29,14 +31,20 @@ import { resolveHarnessPaths } from './harness/paths.js';
 const windowManager = new WindowManager();
 const mcpStore = new McpStore(mcpServersFilePath());
 const mcpService = new McpService(mcpStore);
-// boot 补丁在每次 start 时读取最新应用设置（沙箱开关）与 MCP 服务器列表。
+// boot 补丁在每次 start 时读取最新应用设置（沙箱开关 / 自定义插件）与
+// MCP 服务器列表。
 const harnessService = new HarnessService({
-  buildPatches: () =>
-    buildBootPatches({
+  buildPatches: () => {
+    const paths = resolveHarnessPaths();
+    const settings = loadAppSettingsFile(appSettingsFilePath());
+    return buildBootPatches({
       mcpServers: mcpStore.enabledRecords(),
-      sandbox: loadAppSettingsFile(appSettingsFilePath()).sandboxEnabled,
+      sandbox: settings.sandboxEnabled,
       workspaceRoot: process.env.DSH_CWD ?? process.cwd(),
-    }),
+      userPlugins: settings.plugins.filter((plugin) => plugin.enabled),
+      configDir: path.dirname(paths.configPath),
+    });
+  },
 });
 
 // 旧布局（Electron userData）一次性迁移到 ~/.deep-seek-harness-code；
@@ -77,11 +85,13 @@ const settingsService = new SettingsService({
 });
 // 自动化调度：设置即数据源（store 变更即时生效），触发走 harness 会话面。
 const automationService = new AutomationService({ store: settingsStore, harness: harnessService });
+// 插件服务：内置组合行状态 + 自定义插件（app-settings.plugins）管理。
+const pluginService = new PluginService({ settings: settingsService, harness: harnessService });
 
 initLifecycle({
   windowManager,
   onReady: () => {
-    registerIpcHandlers({ harness: harnessService, settings: settingsService, providers: providerService, mcp: mcpService });
+    registerIpcHandlers({ harness: harnessService, settings: settingsService, providers: providerService, mcp: mcpService, plugins: pluginService });
     settingsService.start();
     automationService.start();
     // 宿主状态与事件流推送到所有窗口；事件同时喂给设置服务（通知 / 提问自动继续）。

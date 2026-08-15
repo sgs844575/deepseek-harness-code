@@ -27,6 +27,7 @@ const DEFAULTS: AppSettingsDto = {
   archiveRetentionDays: 7,
   dataPath: '',
   projects: [],
+  plugins: [],
   automations: [],
   sandboxEnabled: false,
 };

@@ -206,6 +206,32 @@ export interface ProjectEntryDto {
   name: string;
 }
 
+/** 自定义 harness 插件（boot 补丁注入组合；入口为 cordis 插件 JS 模块）。 */
+export interface UserPluginDto {
+  id: string;
+  name: string;
+  /** 插件入口 JS 文件绝对路径（lib/index.js 之类）。 */
+  entryPath: string;
+  enabled: boolean;
+}
+
+/** 新增 / 编辑自定义插件的输入（编辑必须带 id）。 */
+export interface UserPluginUpsertDto {
+  id?: string;
+  name: string;
+  entryPath: string;
+}
+
+/** 插件状态视图（设置页「插件」分区）。 */
+export interface PluginSnapshotDto {
+  /** cordis.yml 静态组合行（内置）。 */
+  builtin: { id: string; status: PluginLoadStatus }[];
+  /** 自定义插件（app-settings.plugins）。 */
+  user: (UserPluginDto & { status: PluginLoadStatus })[];
+}
+
+export type PluginLoadStatus = 'loaded' | 'disabled' | 'error';
+
 /** 自动化调度：daily 每天 time（HH:mm）/ weekly 每周 weekday(0-6,0=周日) time / interval 每 minutes 分钟。 */
 export type AutomationScheduleDto =
   | { type: 'daily'; time: string }
@@ -273,6 +299,8 @@ export interface AppSettingsDto {
   dataPath: string;
   /** 已注册项目列表（添加项目 / 切换工作区用）。 */
   projects: ProjectEntryDto[];
+  /** 自定义 harness 插件（boot 补丁注入；应用变更后随引擎重启生效）。 */
+  plugins: UserPluginDto[];
   /** 自动化任务（主进程定时调度，到点创建会话注入 prompt）。 */
   automations: AutomationDto[];
   /** 沙箱栈（Windows ACL 读写约束 pwsh / fs 工具；重启应用后生效，默认关闭）。 */

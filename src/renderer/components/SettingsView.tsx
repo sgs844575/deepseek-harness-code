@@ -14,6 +14,7 @@ import {
 } from '../state/appearance';
 import { useAppSettings } from '../state/appSettings';
 import { McpSettings } from './McpSettings';
+import { PluginSettings } from './PluginSettings';
 import { ProviderSettings } from './ProviderSettings';
 
 export interface SettingsViewProps {
@@ -31,6 +32,7 @@ export type SettingsSectionId =
   | 'rules'
   | 'automation'
   | 'mcp'
+  | 'plugins'
   | 'data';
 
 const NAV_GROUPS: { label: string; items: { id: SettingsSectionId; title: string }[] }[] = [
@@ -54,6 +56,7 @@ const NAV_GROUPS: { label: string; items: { id: SettingsSectionId; title: string
     items: [
       { id: 'automation', title: '自动化' },
       { id: 'mcp', title: 'MCP 服务器' },
+      { id: 'plugins', title: '插件' },
     ],
   },
   {
@@ -70,6 +73,7 @@ const SECTION_TITLES: Record<SettingsSectionId, string> = {
   rules: '项目规则',
   automation: '自动化',
   mcp: 'MCP 服务器',
+  plugins: '插件',
   data: '数据',
 };
 
@@ -137,6 +141,9 @@ export function SettingsView({ onClose, initialSection = 'general' }: SettingsVi
         ) : section === 'mcp' ? (
           // MCP 服务器为独立管理页（页头带应用变更按钮）。
           <McpSettings />
+        ) : section === 'plugins' ? (
+          // 插件为独立管理页（内置状态 + 自定义插件安装，页头带应用变更按钮）。
+          <PluginSettings />
         ) : (
           <>
             <h1 className="settingspage__title">{SECTION_TITLES[section]}</h1>

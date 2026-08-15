@@ -8,10 +8,13 @@ import type {
   HostStateDto,
   McpServerDto,
   McpUpsertDto,
+  PluginSnapshotDto,
   PromptAttachmentDto,
   ProviderPrefsDto,
   ProviderSnapshotDto,
   ProviderUpsertDto,
+  UserPluginDto,
+  UserPluginUpsertDto,
 } from '../shared/protocol.js';
 
 /**
@@ -157,6 +160,16 @@ const bridge: ElectronBridge = {
         ipcRenderer.removeListener(channels.mcp.changed, handler);
       };
     },
+  },
+  plugins: {
+    getAll: (): Promise<PluginSnapshotDto> => ipcRenderer.invoke(channels.plugins.getAll),
+    upsert: (input: UserPluginUpsertDto): Promise<UserPluginDto> =>
+      ipcRenderer.invoke(channels.plugins.upsert, input),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke(channels.plugins.remove, id),
+    setEnabled: (id: string, enabled: boolean): Promise<void> =>
+      ipcRenderer.invoke(channels.plugins.setEnabled, id, enabled),
+    /** 应用变更：harness 以新组合重启（返回重启后宿主状态）。 */
+    apply: (): Promise<HostStateDto> => ipcRenderer.invoke(channels.plugins.apply),
   },
 };
 
