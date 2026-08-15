@@ -13,11 +13,11 @@
 
 | 深色主题 · 对话 / 工具卡片 | 浅色主题 |
 |---|---|
-| ![深色主题](docs/screenshots/main-dark.png) | ![浅色主题](docs/screenshots/main-dark-2.png) |
+| ![深色主题](docs/screenshots/main-dark.png) | ![浅色主题](docs/screenshots/main-light.png) |
 
 设置页（模型服务 / API Key / 多供应商）：
 
-![设置页](docs/screenshots/settings-2.png)
+![设置页](docs/screenshots/settings.png)
 
 ## 能力概览
 
