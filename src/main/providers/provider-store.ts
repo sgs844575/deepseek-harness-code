@@ -56,6 +56,12 @@ export const DEFAULT_PREFS: ProviderPrefsDto = {
   reasoningEffort: 'high',
 };
 
+/** 正整数（>0）；非法值归 undefined（= harness 默认）。 */
+function positiveIntOrUndefined(value: unknown): number | undefined {
+  const num = typeof value === 'number' ? value : Number(value);
+  return Number.isSafeInteger(num) && num > 0 ? num : undefined;
+}
+
 /** 掩码展示：保留前 3 后 4，其余以 * 代替；短 key 全掩码。 */
 export function maskApiKey(key: string): string {
   const trimmed = key.trim();
@@ -83,7 +89,16 @@ function normalizeModels(raw: unknown): ProviderModelDto[] {
     const name = typeof record.name === 'string' && record.name.trim().length > 0
       ? record.name.trim().slice(0, 120)
       : undefined;
-    models.push(name === undefined ? { id } : { id, name });
+    const contextWindow = positiveIntOrUndefined(record.contextWindow);
+    models.push(
+      name === undefined && contextWindow === undefined
+        ? { id }
+        : {
+            id,
+            ...(name === undefined ? {} : { name }),
+            ...(contextWindow === undefined ? {} : { contextWindow }),
+          },
+    );
   }
   return models;
 }
@@ -164,23 +179,29 @@ export function normalizeProvidersFile(raw: unknown): ProvidersFile {
     providers.push(provider);
   }
   if (providers.length === 0) return seedProvidersFile();
-  const thinking = record.prefs !== undefined && typeof record.prefs === 'object'
-    ? (record.prefs as Record<string, unknown>).thinking
-    : undefined;
-  const effort = record.prefs !== undefined && typeof record.prefs === 'object'
-    ? (record.prefs as Record<string, unknown>).reasoningEffort
-    : undefined;
   const activeProviderId =
     typeof record.activeProviderId === 'string' && seenIds.has(record.activeProviderId)
       ? record.activeProviderId
       : providers[0].id;
+  const prefsRecord =
+    record.prefs !== undefined && typeof record.prefs === 'object'
+      ? (record.prefs as Record<string, unknown>)
+      : {};
   return {
     version: 1,
     activeProviderId,
     prefs: {
-      thinking: thinking === 'disabled' ? 'disabled' : 'enabled',
+      thinking: prefsRecord.thinking === 'disabled' ? 'disabled' : 'enabled',
       reasoningEffort:
-        effort === 'off' || effort === 'max' || effort === 'high' ? effort : DEFAULT_PREFS.reasoningEffort,
+        prefsRecord.reasoningEffort === 'off' || prefsRecord.reasoningEffort === 'max' || prefsRecord.reasoningEffort === 'high'
+          ? prefsRecord.reasoningEffort
+          : DEFAULT_PREFS.reasoningEffort,
+      ...(positiveIntOrUndefined(prefsRecord.maxTokens) !== undefined
+        ? { maxTokens: positiveIntOrUndefined(prefsRecord.maxTokens) }
+        : {}),
+      ...(positiveIntOrUndefined(prefsRecord.contextWindow) !== undefined
+        ? { contextWindow: positiveIntOrUndefined(prefsRecord.contextWindow) }
+        : {}),
     },
     providers,
   };
@@ -437,12 +458,24 @@ export class ProviderStore {
   }
 
   updatePrefs(patch: Partial<ProviderPrefsDto>): void {
+    const current = this.file.prefs;
+    const maxTokens =
+      patch.maxTokens === undefined && !Object.prototype.hasOwnProperty.call(patch, 'maxTokens')
+        ? current.maxTokens
+        : positiveIntOrUndefined(patch.maxTokens);
+    const contextWindow =
+      patch.contextWindow === undefined && !Object.prototype.hasOwnProperty.call(patch, 'contextWindow')
+        ? current.contextWindow
+        : positiveIntOrUndefined(patch.contextWindow);
     const prefs = {
-      thinking: patch.thinking === 'disabled' || patch.thinking === 'enabled' ? patch.thinking : this.file.prefs.thinking,
+      thinking:
+        patch.thinking === 'disabled' || patch.thinking === 'enabled' ? patch.thinking : current.thinking,
       reasoningEffort:
         patch.reasoningEffort === 'off' || patch.reasoningEffort === 'high' || patch.reasoningEffort === 'max'
           ? patch.reasoningEffort
-          : this.file.prefs.reasoningEffort,
+          : current.reasoningEffort,
+      ...(maxTokens !== undefined ? { maxTokens } : {}),
+      ...(contextWindow !== undefined ? { contextWindow } : {}),
     };
     this.commit({ ...this.file, prefs });
   }

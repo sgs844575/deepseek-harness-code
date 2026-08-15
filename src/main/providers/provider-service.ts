@@ -71,7 +71,9 @@ export class ProviderService {
     return key;
   }
 
-  /** 当前激活供应商的 llm 设置段（thinking disabled 时强制 effort=off）。 */
+  /** 当前激活供应商的 llm 设置段（thinking disabled 时强制 effort=off；
+   * prefs 的输出上限 / 上下文窗口映射为 llm-deepseek 的 maxTokens /
+   * defaultContextWindow，缺省回落 harness 默认 256K / 1M）。 */
   llmSection(): LlmSectionDto {
     const snapshot = this.store.snapshot();
     const provider = this.store.activeRecord;
@@ -80,11 +82,14 @@ export class ProviderService {
       thinking === 'disabled' && snapshot.prefs.reasoningEffort !== 'off'
         ? 'off'
         : snapshot.prefs.reasoningEffort;
+    const prefs = snapshot.prefs;
     return {
       baseURL: provider.baseURL,
       models: provider.models,
       thinking,
       reasoningEffort,
+      ...(prefs.maxTokens !== undefined ? { maxTokens: prefs.maxTokens } : {}),
+      ...(prefs.contextWindow !== undefined ? { defaultContextWindow: prefs.contextWindow } : {}),
     };
   }
 

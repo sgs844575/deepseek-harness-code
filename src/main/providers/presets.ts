@@ -24,8 +24,8 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     baseURL: 'https://api.deepseek.com',
     website: 'https://platform.deepseek.com/api_keys',
     models: [
-      { id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash' },
-      { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro' },
+      { id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', contextWindow: 1_000_000 },
+      { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', contextWindow: 1_000_000 },
     ],
   },
   {

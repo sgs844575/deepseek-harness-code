@@ -17,6 +17,13 @@ function makeStore(): ProviderStore {
   return new ProviderStore(path.join(dir, 'providers.json'));
 }
 
+/** 临时文件路径（已登记目录，测试后统一清理）。 */
+function tempFile(): string {
+  const dir = mkdtempSync(path.join(tmpdir(), 'dshc-providers-'));
+  tempDirs.push(dir);
+  return path.join(dir, 'providers.json');
+}
+
 afterEach(() => {
   for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
   tempDirs = [];
@@ -149,6 +156,51 @@ describe('ProviderStore upsert', () => {
     store.addApiKeys(created.id, ['sk-custom0000001']);
     store.activate(created.id);
     expect(store.snapshot().activeProviderId).toBe(created.id);
+  });
+
+  it('消息设置：maxTokens / contextWindow 可设置、显式 undefined 清除、持久化往返', () => {
+    const file = tempFile();
+    writeFileSync(file, JSON.stringify(seedProvidersFile()), 'utf8');
+    const store = new ProviderStore(file);
+    // 缺省：无覆盖（回落 harness 默认）。
+    expect(store.snapshot().prefs.maxTokens).toBeUndefined();
+    expect(store.snapshot().prefs.contextWindow).toBeUndefined();
+    // 设置非法值被归一化丢弃；合法值生效。
+    store.updatePrefs({ maxTokens: -5, contextWindow: 0 });
+    expect(store.snapshot().prefs.maxTokens).toBeUndefined();
+    store.updatePrefs({ maxTokens: 32768, contextWindow: 131072 });
+    expect(store.snapshot().prefs).toMatchObject({ maxTokens: 32768, contextWindow: 131072 });
+    // 未提及的键保持不变。
+    store.updatePrefs({ thinking: 'disabled' });
+    expect(store.snapshot().prefs.maxTokens).toBe(32768);
+    // 显式传 undefined = 清除（恢复默认）。
+    store.updatePrefs({ maxTokens: undefined });
+    expect(store.snapshot().prefs.maxTokens).toBeUndefined();
+    expect(store.snapshot().prefs.contextWindow).toBe(131072);
+    // 持久化往返。
+    const reloaded = new ProviderStore(file);
+    expect(reloaded.snapshot().prefs.contextWindow).toBe(131072);
+  });
+
+  it('模型目录保留 contextWindow；非法值丢弃', () => {
+    const normalized = normalizeProvidersFile({
+      providers: [
+        {
+          id: 'p1',
+          name: '网关',
+          baseURL: 'https://gw.example.com/v1',
+          models: [
+            { id: 'm1', name: 'M1', contextWindow: 131072 },
+            { id: 'm2', name: 'M2', contextWindow: 'x' },
+          ],
+        },
+      ],
+      activeProviderId: 'p1',
+      prefs: { thinking: 'enabled', reasoningEffort: 'high' },
+    });
+    const models = normalized.providers[0]?.models ?? [];
+    expect(models[0]).toEqual({ id: 'm1', name: 'M1', contextWindow: 131072 });
+    expect(models[1]).toEqual({ id: 'm2', name: 'M2' });
   });
 
   it('非法 baseURL 拒绝', () => {
