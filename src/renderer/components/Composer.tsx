@@ -566,74 +566,6 @@ export function Composer({
         />
         <div className="composer__toolbar">
           <div className="composer__left">
-            {/* Agent 预设（输入框左下首位）：空白会话切换当前会话，已开始则设默认 */}
-            {presets.length > 0 && (
-              <div className="composer__pillwrap">
-                <button
-                  type="button"
-                  className={`composer__pill${menu === 'preset' ? ' composer__pill--open' : ''}${
-                    activePresetId !== undefined && activePresetId !== defaultPresetId
-                      ? ' composer__pill--accent'
-                      : ''
-                  }`}
-                  title="Agent 预设（标准 / PTC / 极简 / 创造 …）"
-                  aria-expanded={menu === 'preset'}
-                  onClick={() => setMenu((current) => (current === 'preset' ? null : 'preset'))}
-                >
-                  <PresetIcon />
-                  <span className="composer__pill-label">{presetLabel}</span>
-                  <ChevronDownIcon />
-                </button>
-                {menu === 'preset' && (
-                  <div className="composer__pop composer__pop--preset" role="menu">
-                    <div className="composer__pop-note">
-                      {presetLocked
-                        ? '当前会话已开始，预设锁定；选择将设为之后新会话的默认。'
-                        : '切换当前（空白）会话的预设。'}
-                    </div>
-                    {presets.map((preset) => {
-                      const active = preset.id === activePresetId;
-                      const presetDescription =
-                        preset.broken !== undefined
-                          ? `无法组装：${preset.broken}`
-                          : (preset.description ?? '');
-                      return (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          key={preset.id}
-                          className={`composer__pop-item${active ? ' composer__pop-item--active' : ''}`}
-                          disabled={preset.broken !== undefined}
-                          title={preset.broken !== undefined ? `无法组装：${preset.broken}` : undefined}
-                          onClick={() => {
-                            setMenu(null);
-                            onSelectPreset(preset.id);
-                          }}
-                        >
-                          <span className="composer__pop-item-icon"><PresetIcon /></span>
-                          <span className="composer__pop-item-main">
-                            <span className="composer__pop-item-title">
-                              {preset.name ?? preset.id}
-                              {preset.id === defaultPresetId && (
-                                <span className="composer__pop-group-badge">默认</span>
-                              )}
-                              {preset.trust === 'user' && (
-                                <span className="composer__pop-group-badge">自建</span>
-                              )}
-                            </span>
-                            {presetDescription.length > 0 && (
-                              <span className="composer__pop-item-desc">{presetDescription}</span>
-                            )}
-                          </span>
-                          {active && <span className="composer__pop-check"><CheckIcon /></span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* ＋ 更多操作 */}
             <div className="composer__pillwrap">
               <button
@@ -753,6 +685,74 @@ export function Composer({
                 </div>
               )}
             </div>
+
+            {/* Agent 预设（＋号右侧）：空白会话切换当前会话，已开始则设默认 */}
+            {presets.length > 0 && (
+              <div className="composer__pillwrap">
+                <button
+                  type="button"
+                  className={`composer__pill${menu === 'preset' ? ' composer__pill--open' : ''}${
+                    activePresetId !== undefined && activePresetId !== defaultPresetId
+                      ? ' composer__pill--accent'
+                      : ''
+                  }`}
+                  title="Agent 预设（标准 / PTC / 极简 / 创造 …）"
+                  aria-expanded={menu === 'preset'}
+                  onClick={() => setMenu((current) => (current === 'preset' ? null : 'preset'))}
+                >
+                  <PresetIcon />
+                  <span className="composer__pill-label">{presetLabel}</span>
+                  <ChevronDownIcon />
+                </button>
+                {menu === 'preset' && (
+                  <div className="composer__pop composer__pop--preset" role="menu">
+                    <div className="composer__pop-note">
+                      {presetLocked
+                        ? '当前会话已开始，预设锁定；选择将设为之后新会话的默认。'
+                        : '切换当前（空白）会话的预设。'}
+                    </div>
+                    {presets.map((preset) => {
+                      const active = preset.id === activePresetId;
+                      const presetDescription =
+                        preset.broken !== undefined
+                          ? `无法组装：${preset.broken}`
+                          : (preset.description ?? '');
+                      return (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          key={preset.id}
+                          className={`composer__pop-item${active ? ' composer__pop-item--active' : ''}`}
+                          disabled={preset.broken !== undefined}
+                          title={preset.broken !== undefined ? `无法组装：${preset.broken}` : undefined}
+                          onClick={() => {
+                            setMenu(null);
+                            onSelectPreset(preset.id);
+                          }}
+                        >
+                          <span className="composer__pop-item-icon"><PresetIcon /></span>
+                          <span className="composer__pop-item-main">
+                            <span className="composer__pop-item-title">
+                              {preset.name ?? preset.id}
+                              {preset.id === defaultPresetId && (
+                                <span className="composer__pop-group-badge">默认</span>
+                              )}
+                              {preset.trust === 'user' && (
+                                <span className="composer__pop-group-badge">自建</span>
+                              )}
+                            </span>
+                            {presetDescription.length > 0 && (
+                              <span className="composer__pop-item-desc">{presetDescription}</span>
+                            )}
+                          </span>
+                          {active && <span className="composer__pop-check"><CheckIcon /></span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* 权限模式 */}
             <div className="composer__pillwrap">
