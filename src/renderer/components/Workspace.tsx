@@ -78,6 +78,8 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
   const hostStatusSeenRef = useRef<string>('booting');
   /** 切换项目后待打开的会话 id（点了其他项目的会话时）。 */
   const pendingOpenRef = useRef<string | null>(null);
+  /** 切换项目后待新建会话（＋菜单「在项目中新建会话」）。 */
+  const pendingCreateRef = useRef(false);
   const localNames = useSessionNames();
   const { settings, update: updateAppSettings } = useAppSettings();
 
@@ -206,6 +208,8 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
     try {
       await requireBridge().host.switchWorkspace(cwd);
     } catch (error) {
+      pendingCreateRef.current = false;
+      pendingOpenRef.current = null;
       console.error('切换项目失败', error);
       showNotice({
         kind: 'error',
@@ -213,6 +217,20 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
       });
     }
   }, [showNotice]);
+
+  /** 在指定项目新建会话：当前项目直接建；其他项目先切换工作区，就绪后自动建。 */
+  const createSessionIn = useCallback(
+    (cwd: string) => {
+      if (cwd.length === 0) return;
+      if (host !== null && cwd.toLowerCase() === host.workspace.toLowerCase()) {
+        void createSession();
+        return;
+      }
+      pendingCreateRef.current = true;
+      void switchProject(cwd);
+    },
+    [host, createSession, switchProject],
+  );
 
   // 宿主就绪流：首次启动 / 项目切换 / 引擎重启后，刷新列表并打开目标会话
   // （切换前点击的其他项目会话 > 当前工作区最近会话 > 新建）。
@@ -252,6 +270,12 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
           pending !== null ? list.find((item) => item.id === pending) : undefined;
         if (target !== undefined) {
           await openSession(target.id);
+          return;
+        }
+        // ＋菜单「在项目中新建会话」：切换完成后在该项目里直接建新会话。
+        if (pendingCreateRef.current) {
+          pendingCreateRef.current = false;
+          await createSession();
           return;
         }
         // 当前工作区最近活跃的会话；无则新建（cwd 缺失视为当前工作区）。
@@ -545,6 +569,9 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
               onStop={handleStop}
               injectedDraft={injectedDraft}
               onNewSession={() => void createSession()}
+              onNewSessionIn={createSessionIn}
+              projects={settings.projects}
+              workspace={host?.workspace ?? ''}
               onExportSession={() => {
                 if (activeId !== null) void handleExport(activeId);
               }}

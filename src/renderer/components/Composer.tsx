@@ -12,6 +12,7 @@ import type {
   AgentModeDto,
   AgentPresetDto,
   InteractionBehaviorDto,
+  ProjectEntryDto,
   PromptModeDto,
   ProviderPrefsDto,
   ReasoningEffortDto,
@@ -48,6 +49,12 @@ export interface ComposerProps {
   onSend(text: string, mode: PromptModeDto): void | Promise<void>;
   onStop(): void | Promise<void>;
   onNewSession(): void;
+  /** 在指定项目（工作区）新建会话：非当前项目时先切换工作区，就绪后自动创建。 */
+  onNewSessionIn(projectPath: string): void;
+  /** 已注册项目列表（＋菜单「在项目中新建会话」）。 */
+  projects: ProjectEntryDto[];
+  /** 当前工作区路径（标记「当前」徽标）。 */
+  workspace: string;
   onExportSession(): void;
   /**
    * 外部注入草稿（欢迎页建议卡）：token 变化时覆写输入框并聚焦。
@@ -110,6 +117,12 @@ function formatTokens(value: number): string {
   return value.toLocaleString('en-US');
 }
 
+/** 取路径最后一段做展示名；空串原样返回。 */
+function baseName(path: string): string {
+  const parts = path.split(/[\\/]/).filter((part) => part.length > 0);
+  return parts.length > 0 ? (parts[parts.length - 1] ?? '') : '';
+}
+
 /**
  * 输入区（Cherry / ZCode 风格）：上方多行输入，下方工具栏——左下角起
  * Agent 预设（plugin/标准/PTC/极简/创造…，空白会话可切）、「+」更多操作、
@@ -135,6 +148,9 @@ export function Composer({
   onSend,
   onStop,
   onNewSession,
+  onNewSessionIn,
+  projects,
+  workspace,
   onExportSession,
   injectedDraft,
   onForkSession,
@@ -142,6 +158,8 @@ export function Composer({
 }: ComposerProps) {
   const [text, setText] = useState('');
   const [menu, setMenu] = useState<MenuId | null>(null);
+  /** ＋菜单二级视图：动作列表 / 项目选择（在项目中新建会话）。 */
+  const [plusView, setPlusView] = useState<'actions' | 'projects'>('actions');
   /** 斜杠菜单：活动项下标 + 本次输入内的关闭标记（Esc/外点后不再弹出，改输入即复位）。 */
   const [slashActive, setSlashActive] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState(false);
@@ -312,6 +330,7 @@ export function Composer({
   // 任一菜单（含斜杠命令）打开时：点击外部或 Esc 关闭。
   useEffect(() => {
     if (menu === null && !slashOpen) return;
+    if (menu === 'plus') setPlusView('actions');
     const onPointerDown = (event: PointerEvent): void => {
       if (rootRef.current !== null && !rootRef.current.contains(event.target as Node)) {
         setMenu(null);
@@ -387,6 +406,18 @@ export function Composer({
   );
 
   const canSend = !disabled && text.trim().length > 0;
+
+  /* 项目选择列表：已注册项目 + 当前工作区（未注册也出现在首位，标「当前」）。 */
+  const projectOptions = useMemo(() => {
+    const list = [...projects];
+    if (
+      workspace.length > 0 &&
+      !list.some((project) => project.path.toLowerCase() === workspace.toLowerCase())
+    ) {
+      list.unshift({ path: workspace, name: baseName(workspace) });
+    }
+    return list;
+  }, [projects, workspace]);
   const activeProvider = snapshot.providers.find(
     (provider) => provider.id === snapshot.activeProviderId,
   );
@@ -557,7 +588,7 @@ export function Composer({
               >
                 <PlusIcon />
               </button>
-              {menu === 'plus' && (
+              {menu === 'plus' && plusView === 'actions' && (
                 <div className="composer__pop" role="menu">
                   <button
                     type="button"
@@ -575,6 +606,19 @@ export function Composer({
                     type="button"
                     role="menuitem"
                     className="composer__pop-item"
+                    onClick={() => setPlusView('projects')}
+                  >
+                    <span className="composer__pop-item-icon"><FolderPillIcon /></span>
+                    <span className="composer__pop-item-main">
+                      <span className="composer__pop-item-title">在项目中新建会话…</span>
+                      <span className="composer__pop-item-desc">切换到所选项目并开始新对话</span>
+                    </span>
+                    <ChevronDownIcon />
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="composer__pop-item"
                     disabled={disabled}
                     onClick={() => {
                       setMenu(null);
@@ -584,6 +628,55 @@ export function Composer({
                     <span className="composer__pop-item-icon"><ExportIcon /></span>
                     <span className="composer__pop-item-title">导出当前会话为 Markdown</span>
                   </button>
+                </div>
+              )}
+              {menu === 'plus' && plusView === 'projects' && (
+                <div className="composer__pop" role="menu" aria-label="选择项目">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="composer__pop-item composer__pop-item--back"
+                    onClick={() => setPlusView('actions')}
+                  >
+                    <BackLeftIcon />
+                    <span className="composer__pop-item-title">返回</span>
+                  </button>
+                  <div className="composer__pop-group">选择项目新建会话</div>
+                  {projectOptions.length === 0 ? (
+                    <div className="composer__pop-note">
+                      尚未注册项目——侧栏「项目」区的 ＋ 可添加项目。
+                    </div>
+                  ) : (
+                    projectOptions.map((project) => {
+                      const current =
+                        workspace.length > 0 &&
+                        project.path.toLowerCase() === workspace.toLowerCase();
+                      return (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          key={project.path}
+                          className="composer__pop-item"
+                          title={project.path}
+                          onClick={() => {
+                            setMenu(null);
+                            onNewSessionIn(project.path);
+                          }}
+                        >
+                          <span className="composer__pop-item-icon"><FolderPillIcon /></span>
+                          <span className="composer__pop-item-main">
+                            <span className="composer__pop-item-title">
+                              {project.name}
+                              {current && (
+                                <span className="composer__pop-group-badge">当前</span>
+                              )}
+                            </span>
+                            <span className="composer__pop-item-id">{project.path}</span>
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
               )}
             </div>
@@ -1038,6 +1131,30 @@ function PlusIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** 项目（文件夹）胶囊图标（＋菜单「在项目中新建会话」）。 */
+function FolderPillIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.2h7a2 2 0 0 1 2 2v8.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-11Z"
+        stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** 返回箭头（＋菜单二级视图）。 */
+function BackLeftIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M14.5 5.5 8 12l6.5 6.5"
+        stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"
+      />
     </svg>
   );
 }
