@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 import { app } from 'electron';
 import { loadAppSettingsFile } from '../settings/app-settings-store.js';
@@ -5,7 +6,10 @@ import { appSettingsFilePath, resolveAppHome } from '../paths/app-paths.js';
 
 /**
  * harness 相关路径的唯一事实来源。
- * 开发期 app.getAppPath() 即项目根；打包分发形态在二期处理。
+ * dev：app.getAppPath() 即项目根，config/harness 与 deepseek-harness 都在其下。
+ * 打包态：UI 进 app.asar（appRoot 指向 asar 内部），cordis.yml 与 harness 树
+ * 由 build-release.mjs 以真实目录放在 resources/ 下（运行时动态 import 的
+ * 模块不进 asar），故以 process.resourcesPath 为基准根。
  */
 export interface HarnessPaths {
   /** deepseek-harness 仓库根（boot 模块与全部插件产物所在）。 */
@@ -33,15 +37,20 @@ function resolveDshHome(): string {
 
 export function resolveHarnessPaths(): HarnessPaths {
   const appRoot = app.getAppPath();
+  const packaged = app.isPackaged;
+  const base = packaged ? process.resourcesPath : appRoot;
   const harnessRootFromEnv = process.env.DSH_HARNESS_ROOT;
   return {
     harnessRoot: harnessRootFromEnv && harnessRootFromEnv.length > 0
       ? path.resolve(harnessRootFromEnv)
-      : path.join(appRoot, 'deepseek-harness'),
-    configPath: path.join(appRoot, 'config', 'harness', 'cordis.yml'),
+      : path.join(base, 'deepseek-harness'),
+    configPath: path.join(base, 'config', 'harness', 'cordis.yml'),
     dshHome: resolveDshHome(),
+    // 打包态 appRoot 在 asar 内部，不能作默认工作区（dev 保持项目根）。
     workspace: process.env.DSH_CWD && process.env.DSH_CWD.length > 0
       ? path.resolve(process.env.DSH_CWD)
-      : appRoot,
+      : packaged
+        ? os.homedir()
+        : appRoot,
   };
 }

@@ -1,6 +1,6 @@
 # DeepSeek Harness Code
 
-[![version](https://img.shields.io/badge/version-v0.1.0-blue)]()
+[![version](https://img.shields.io/badge/version-v0.1.1-blue)]()
 [![platform](https://img.shields.io/badge/platform-Windows-informational)]()
 [![license](https://img.shields.io/badge/license-MIT-green)]()
 [![author](https://img.shields.io/badge/author-逆流无邪-orange)]()
@@ -135,22 +135,24 @@ node scripts/smoke-harness.mjs
 
 （开发客户端本体也可在设置页把 baseURL 指到 mock 验证 UI 流。）
 
-## 打包发布（v0.1.0，Windows）
+## 打包发布（v0.1.1，Windows）
 
 ```powershell
 npm run dist
-# 产物：release/deepseek-harness-code-v0.1.0-win-x64.zip
+# 产物：release/deepseek-harness-code-v0.1.1-win-x64.zip
 ```
 
-发布 zip 的组成与首次运行方式：
+发布 zip 的组成与运行方式（**解压即用，双击 exe 即可，机器无需 Node.js**）：
 
-- `electron-forge package` 产物（`asar: false`），客户端本体与原生依赖已随包；
-- `config/harness/`（cordis.yml + 自写插件）与 `deepseek-harness/` 源码 +
-  **已构建的 lib 产物**拷入 `resources/app/`，运行时路径解析与开发形态完全一致；
-- harness 的 `node_modules`（pnpm 工作区，体量大）不进包：解压后先执行一次
-  **`setup.cmd`**，在包内 `deepseek-harness/` 执行
-  `pnpm install --ignore-scripts --prod` 重建生产依赖（需 Node.js ≥ 22 与 pnpm），
-  之后双击 `deepseek-harness-code.exe` 即可使用。
+- `electron-forge package` 产物（经典 `app.asar` 形态）只含 UI 壳；
+- `config/harness/`（cordis.yml + 自写插件）与 `deepseek-harness/`（源码 +
+  lib 产物）以真实目录住在 `resources/` 下——运行时动态加载的模块不进 asar；
+- harness 生产依赖在打包时已预装进包（hoisted 平铺 + workspace 补链，
+  发布脚本内置依赖闭环与解压复检两道守卫），终端用户零安装；
+- 打包期间 forge 钩子会把 vendored harness 树暂出仓库避免 packager 遍历
+  （历史 OOM 根因），打包完成自动移回；
+- `setup.cmd` 为修复工具：仅当包内 node_modules 损坏导致启动报
+  `Cannot find package` 时使用（需 Node.js ≥ 22 与 pnpm）。
 
 ## 开源信息
 
@@ -158,7 +160,7 @@ npm run dist
 - 仓库：<https://github.com/sgs844575/deepseek-harness-code>
 - 协议：[MIT](./LICENSE)；内嵌的 [deepseek-harness](./deepseek-harness)
   （MIT）与 JetBrains Mono 字体（SIL OFL 1.1）分属各自协议
-- 当前版本：v0.1.0
+- 当前版本：v0.1.1
 
 ## 目录速览
 
@@ -184,7 +186,7 @@ scripts/smoke-harness.mjs        # headless 集成冒烟
 子代理视图（`subagent.*`，事件在子会话日志中，需跨会话聚合）· 会话 fork ·
 内嵌终端（需 node-pty Electron 重建或自写 PTY）· 沙箱栈与权限模式切换
 （koffi / pwsh-sandbox / permission-presets）· skills / MCP · 多工作区多窗口 ·
-安装器形态分发（当前为 zip + setup.cmd 免安装形态）· macOS / Linux 适配 · i18n。
+安装器形态分发（当前为解压即用 zip，免安装免依赖）· macOS / Linux 适配 · i18n。
 
 ## 已知约束
 
@@ -192,5 +194,5 @@ scripts/smoke-harness.mjs        # headless 集成冒烟
   的窄接口消费，harness 升级时只需对齐该文件。
 - vendored harness 树携带**已构建的 lib 产物**（其源码仓库的 `.gitignore`
   排除 `lib/`，本项目以 `git add -f` 强制纳入），克隆后无需再构建 harness。
-- 打包为免安装 zip（`asar: false` + setup.cmd 重建 harness 生产依赖），
+- 打包为免安装 zip（`app.asar` + harness 树/依赖以真实目录随包，开箱即用），
   未提供安装器与代码签名。
