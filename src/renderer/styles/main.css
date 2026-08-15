@@ -2891,12 +2891,6 @@ select:focus-visible {
   background: var(--fill-hover);
 }
 
-/* ＋菜单二级视图顶部的返回行 */
-.composer__pop-item--back {
-  color: var(--muted);
-  align-items: center;
-  margin-bottom: 2px;
-}
 
 .composer__pop-item--active {
   color: var(--accent);
