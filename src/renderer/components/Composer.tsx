@@ -3,12 +3,15 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
 } from 'react';
 import type {
   AgentModeDto,
+  AgentPresetDto,
   InteractionBehaviorDto,
   PromptModeDto,
+  ProviderPrefsDto,
   ReasoningEffortDto,
 } from '../../shared/protocol.js';
 import { requireBridge } from '../ipc/api';
@@ -22,6 +25,17 @@ export interface ComposerProps {
   /** Agent 权限模式（默认询问 / 完全访问 / 计划模式）。 */
   agentMode: AgentModeDto;
   onAgentModeChange(mode: AgentModeDto): void;
+  /** 当前上下文占用（最近一次请求的 inputTokens；null = 尚无数据）。 */
+  contextTokens: number | null;
+  /** Agent 预设名单（空数组 = 组合未启用 roster，隐藏选择器）。 */
+  presets: AgentPresetDto[];
+  /** 活动会话运行的预设 id（事件流 > 会话头 > 默认）。 */
+  activePresetId?: string;
+  /** roster 默认预设 id（新会话挂载它）。 */
+  defaultPresetId?: string;
+  /** 活动会话是否已锁定预设（已开始对话；选择将降级为设默认）。 */
+  presetLocked: boolean;
+  onSelectPreset(presetId: string): void;
   /** 打开设置（模型服务分区，模型菜单「管理模型」入口）。 */
   onOpenSettings(section?: 'model'): void;
   onSend(text: string, mode: PromptModeDto): void | Promise<void>;
@@ -31,6 +45,16 @@ export interface ComposerProps {
 }
 
 const TEXTAREA_MAX_HEIGHT = 220;
+
+/** harness llm-deepseek 的默认档（消息设置「默认」选项 = 恢复这些值）。 */
+const DEFAULT_MAX_TOKENS = 256_000;
+const DEFAULT_CONTEXT_WINDOW = 1_000_000;
+
+/** 最大输出预设（tokens）。 */
+const MAX_TOKENS_OPTIONS = [8_192, 16_384, 32_768, 65_536] as const;
+
+/** 上下文窗口预设（tokens）。 */
+const CONTEXT_WINDOW_OPTIONS = [65_536, 131_072, 262_144, 524_288, 1_048_576] as const;
 
 /** 权限模式菜单项（完全对应 harness 原生能力）。 */
 const MODE_OPTIONS: {
@@ -50,12 +74,20 @@ const EFFORT_OPTIONS: { value: ReasoningEffortDto; label: string }[] = [
   { value: 'max', label: '思考 · 最大' },
 ];
 
-type MenuId = 'plus' | 'mode' | 'model' | 'effort';
+type MenuId = 'plus' | 'preset' | 'mode' | 'model' | 'effort' | 'msgsettings';
+
+/** tokens → 紧凑展示（12,345 / 1.2M）。 */
+function formatTokens(value: number): string {
+  if (value >= 1_000_000 && value % 1_000_000 === 0) return `${value / 1_000_000}M`;
+  return value.toLocaleString('en-US');
+}
 
 /**
- * 输入区（Cherry / ZCode 风格）：上方多行输入，下方工具栏——左侧「+」
- * 更多操作、权限模式、模型选择、思考强度四组胶囊菜单，右侧停止 / 发送。
- * Enter 发送（Shift+Enter 换行）；运行中发送的行为由设置“交互行为”决定。
+ * 输入区（Cherry / ZCode 风格）：上方多行输入，下方工具栏——左下角起
+ * Agent 预设（plugin/标准/PTC/极简/创造…，空白会话可切）、「+」更多操作、
+ * 权限模式、模型选择、思考强度、消息设置六组胶囊菜单，右侧上下文圆环
+ * （hover 详情）+ 停止 / 发送。Enter 发送（Shift+Enter 换行）；运行中
+ * 发送的行为由设置“交互行为”决定。
  */
 export function Composer({
   disabled,
@@ -63,6 +95,12 @@ export function Composer({
   runningBehavior,
   agentMode,
   onAgentModeChange,
+  contextTokens,
+  presets,
+  activePresetId,
+  defaultPresetId,
+  presetLocked,
+  onSelectPreset,
   onOpenSettings,
   onSend,
   onStop,
@@ -135,8 +173,27 @@ export function Composer({
     (provider) => provider.id === snapshot.activeProviderId,
   );
   const modeOption = MODE_OPTIONS.find((option) => option.value === agentMode) ?? MODE_OPTIONS[0];
+  const activePreset = presets.find((preset) => preset.id === activePresetId);
+  const presetLabel = activePreset?.name ?? activePreset?.id ?? activePresetId ?? '';
   const effortLabel =
     EFFORT_OPTIONS.find((option) => option.value === snapshot.prefs.reasoningEffort)?.label ?? '';
+  // 上下文统计：分母 = 当前模型 contextWindow > prefs 兜底 > harness 默认。
+  const activeModel =
+    activeProvider?.models.find((model) => model.id === defaultModel) ?? undefined;
+  const contextMax =
+    activeModel?.contextWindow ?? snapshot.prefs.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+  const contextPercentage =
+    contextTokens !== null && contextMax > 0
+      ? Math.min(100, Math.max(0, Math.round((contextTokens / contextMax) * 100)))
+      : null;
+  const maxTokensValue = snapshot.prefs.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const contextWindowValue = snapshot.prefs.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+
+  const updatePrefs = useCallback((patch: Partial<ProviderPrefsDto>) => {
+    void requireBridge()
+      .providers.updatePrefs(patch)
+      .catch((error) => console.error('保存消息设置失败', error));
+  }, []);
 
   const selectModel = useCallback(async (providerId: string, modelId: string) => {
     setMenu(null);
@@ -178,6 +235,74 @@ export function Composer({
         />
         <div className="composer__toolbar">
           <div className="composer__left">
+            {/* Agent 预设（输入框左下首位）：空白会话切换当前会话，已开始则设默认 */}
+            {presets.length > 0 && (
+              <div className="composer__pillwrap">
+                <button
+                  type="button"
+                  className={`composer__pill${menu === 'preset' ? ' composer__pill--open' : ''}${
+                    activePresetId !== undefined && activePresetId !== defaultPresetId
+                      ? ' composer__pill--accent'
+                      : ''
+                  }`}
+                  title="Agent 预设（标准 / PTC / 极简 / 创造 …）"
+                  aria-expanded={menu === 'preset'}
+                  onClick={() => setMenu((current) => (current === 'preset' ? null : 'preset'))}
+                >
+                  <PresetIcon />
+                  <span className="composer__pill-label">{presetLabel}</span>
+                  <ChevronDownIcon />
+                </button>
+                {menu === 'preset' && (
+                  <div className="composer__pop composer__pop--preset" role="menu">
+                    <div className="composer__pop-note">
+                      {presetLocked
+                        ? '当前会话已开始，预设锁定；选择将设为之后新会话的默认。'
+                        : '切换当前（空白）会话的预设。'}
+                    </div>
+                    {presets.map((preset) => {
+                      const active = preset.id === activePresetId;
+                      const presetDescription =
+                        preset.broken !== undefined
+                          ? `无法组装：${preset.broken}`
+                          : (preset.description ?? '');
+                      return (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          key={preset.id}
+                          className={`composer__pop-item${active ? ' composer__pop-item--active' : ''}`}
+                          disabled={preset.broken !== undefined}
+                          title={preset.broken !== undefined ? `无法组装：${preset.broken}` : undefined}
+                          onClick={() => {
+                            setMenu(null);
+                            onSelectPreset(preset.id);
+                          }}
+                        >
+                          <span className="composer__pop-item-icon"><PresetIcon /></span>
+                          <span className="composer__pop-item-main">
+                            <span className="composer__pop-item-title">
+                              {preset.name ?? preset.id}
+                              {preset.id === defaultPresetId && (
+                                <span className="composer__pop-group-badge">默认</span>
+                              )}
+                              {preset.trust === 'user' && (
+                                <span className="composer__pop-group-badge">自建</span>
+                              )}
+                            </span>
+                            {presetDescription.length > 0 && (
+                              <span className="composer__pop-item-desc">{presetDescription}</span>
+                            )}
+                          </span>
+                          {active && <span className="composer__pop-check"><CheckIcon /></span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ＋ 更多操作 */}
             <div className="composer__pillwrap">
               <button
@@ -382,8 +507,110 @@ export function Composer({
                 </div>
               )}
             </div>
+
+            {/* 消息设置：输出上限 / 上下文窗口（写入 llm 设置段，下一请求生效） */}
+            <div className="composer__pillwrap">
+              <button
+                type="button"
+                className={`composer__pill${menu === 'msgsettings' ? ' composer__pill--open' : ''}${
+                  snapshot.prefs.maxTokens !== undefined || snapshot.prefs.contextWindow !== undefined
+                    ? ' composer__pill--accent'
+                    : ''
+                }`}
+                title="消息设置（最大输出 / 上下文窗口）"
+                aria-expanded={menu === 'msgsettings'}
+                onClick={() => setMenu((current) => (current === 'msgsettings' ? null : 'msgsettings'))}
+              >
+                <SlidersIcon />
+                <span className="composer__pill-label">消息设置</span>
+                <ChevronDownIcon />
+              </button>
+              {menu === 'msgsettings' && (
+                <div className="composer__pop composer__pop--settings" role="menu">
+                  <div className="composer__pop-setting">
+                    <div className="composer__pop-setting-title">最大输出</div>
+                    <div className="composer__pop-setting-desc">
+                      单次请求的输出上限（当前 {formatTokens(maxTokensValue)}）
+                    </div>
+                    <div className="composer__chips">
+                      <button
+                        type="button"
+                        className={`composer__chip${snapshot.prefs.maxTokens === undefined ? ' composer__chip--active' : ''}`}
+                        onClick={() => updatePrefs({ maxTokens: undefined })}
+                      >
+                        默认 {formatTokens(DEFAULT_MAX_TOKENS)}
+                      </button>
+                      {MAX_TOKENS_OPTIONS.map((value) => (
+                        <button
+                          type="button"
+                          key={value}
+                          className={`composer__chip${snapshot.prefs.maxTokens === value ? ' composer__chip--active' : ''}`}
+                          onClick={() => updatePrefs({ maxTokens: value })}
+                        >
+                          {formatTokens(value)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="composer__pop-setting">
+                    <div className="composer__pop-setting-title">上下文窗口</div>
+                    <div className="composer__pop-setting-desc">
+                      模型未声明时的上下文容量兜底（当前 {formatTokens(contextWindowValue)}，统计圆环按此计算）
+                    </div>
+                    <div className="composer__chips">
+                      {CONTEXT_WINDOW_OPTIONS.map((value) => (
+                        <button
+                          type="button"
+                          key={value}
+                          className={`composer__chip${snapshot.prefs.contextWindow === value ? ' composer__chip--active' : ''}`}
+                          onClick={() => updatePrefs({ contextWindow: value })}
+                        >
+                          {formatTokens(value)}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className={`composer__chip${snapshot.prefs.contextWindow === undefined ? ' composer__chip--active' : ''}`}
+                        onClick={() => updatePrefs({ contextWindow: undefined })}
+                      >
+                        默认 {formatTokens(DEFAULT_CONTEXT_WINDOW)}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <div className="composer__right">
+            {/* 上下文占用圆环（Cherry 同款）：conic 渐变按占用插值着色，hover 展示详情 */}
+            {contextPercentage !== null && (
+              <div className="composer__ctxwrap" tabIndex={0} role="meter"
+                aria-label={`上下文占用 ${contextPercentage}%`}
+                aria-valuemin={0} aria-valuemax={100} aria-valuenow={contextPercentage}
+              >
+                <ContextRing percentage={contextPercentage} busy={running} />
+                <div className="composer__ctxpop">
+                  <div className="composer__ctxpop-title">上下文用量</div>
+                  <div className="composer__ctxbar">
+                    <div
+                      className="composer__ctxbar-fill"
+                      style={{
+                        width: `${contextPercentage}%`,
+                        background: contextColor(contextPercentage),
+                      }}
+                    />
+                  </div>
+                  <div className="composer__ctxpop-row">
+                    <span>
+                      {(contextTokens ?? 0).toLocaleString('en-US')} / {formatTokens(contextMax)}（{contextPercentage}%）
+                    </span>
+                    <span className="composer__ctxpop-model">
+                      {activeModel?.name ?? activeModel?.id ?? defaultModel}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
             {running && (
               <button
                 type="button"
@@ -417,6 +644,66 @@ export function Composer({
 }
 
 /* ---- 内联 SVG 图标（线性、圆头） ---- */
+
+/** 上下文占用配色（Cherry Studio 同款插值）：≤50% ok→warn，>50% warn→danger。 */
+function contextColor(percentage: number): string {
+  const pct = Math.min(100, Math.max(0, percentage));
+  if (pct <= 50) {
+    const warnWeight = Math.round(pct * 2);
+    return `color-mix(in srgb, var(--ok) ${100 - warnWeight}%, var(--warn) ${warnWeight}%)`;
+  }
+  const dangerWeight = Math.round((pct - 50) * 2);
+  return `color-mix(in srgb, var(--warn) ${100 - dangerWeight}%, var(--danger) ${dangerWeight}%)`;
+}
+
+/** 上下文占用圆环：conic-gradient 描边，运行中呼吸动画。 */
+function ContextRing({ percentage, busy }: { percentage: number; busy: boolean }) {
+  return (
+    <span
+      className={`composer__ring${busy ? ' composer__ring--busy' : ''}`}
+      style={
+        {
+          '--ctx-color': contextColor(percentage),
+          '--ctx-pct': `${percentage}%`,
+        } as CSSProperties
+      }
+      aria-hidden
+    >
+      <span className="composer__ring-inner" />
+      <span className="composer__ring-text">{percentage}%</span>
+    </span>
+  );
+}
+
+/** 消息设置（滑杆）图标。 */
+function SlidersIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M5 7.5h9M17.5 7.5H19M5 16.5h2M10.5 16.5H19"
+        stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+      />
+      <circle cx="15.5" cy="7.5" r="2.1" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="8.5" cy="16.5" r="2.1" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
+  );
+}
+
+/** Agent 预设（层叠组合）图标。 */
+function PresetIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 3.6 20 8l-8 4.4L4 8l8-4.4Z"
+        stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"
+      />
+      <path
+        d="M4.6 12.4 12 16.5l7.4-4.1M4.6 16.4 12 20.5l7.4-4.1"
+        stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function ModeIcon({ mode }: { mode: AgentModeDto }) {
   if (mode === 'plan') {

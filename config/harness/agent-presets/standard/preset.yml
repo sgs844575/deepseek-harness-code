@@ -1,0 +1,3 @@
+name: 标准模式
+description: 功能完整的编码 Agent，支持文件编辑、Shell、文件检索、Skills、计划与子代理（对齐官方 standard 预设）。
+order: 2

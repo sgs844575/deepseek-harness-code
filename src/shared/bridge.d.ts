@@ -4,9 +4,12 @@
  * 两端共用同一份类型定义，防止契约漂移。
  */
 import type {
+  AgentPresetDto,
   AppSettingsDto,
   HostStateDto,
   HarnessEventDto,
+  McpServerDto,
+  McpUpsertDto,
   ModelInfoDto,
   PickDataPathResultDto,
   PickFolderResultDto,
@@ -19,6 +22,7 @@ import type {
   QuestionAnswerDto,
   SessionEventDto,
   SessionSummaryDto,
+  SubagentRunDto,
 } from './protocol.js';
 
 export interface ElectronBridge {
@@ -56,14 +60,32 @@ export interface ElectronBridge {
     list(provider: string): Promise<ModelInfoDto[]>;
   };
   session: {
-    create(options?: { model?: string }): Promise<{ sessionId: string }>;
+    /** 新建会话（可显式指定预设；缺省 = roster 默认）。返回会话 id 与所用预设。 */
+    create(options?: { model?: string; preset?: string }): Promise<{
+      sessionId: string;
+      agentPreset?: string;
+    }>;
     open(sessionId: string): Promise<void>;
     list(): Promise<SessionSummaryDto[]>;
     history(sessionId: string): Promise<SessionEventDto[]>;
     prompt(sessionId: string, text: string, options?: { mode?: PromptModeDto }): Promise<void>;
     cancel(sessionId: string): Promise<void>;
+    /** 派生会话（fork）：以父会话已完成回合为种子创建新会话并返回其 id。 */
+    fork(sessionId: string): Promise<{ sessionId: string }>;
+    /** 父会话的子代理目录（冷数据，含历史运行）。 */
+    subagents(sessionId: string): Promise<SubagentRunDto[]>;
     /** 订阅事件流推送；返回取消订阅函数。 */
     onEvent(listener: (envelope: HarnessEventDto) => void): () => void;
+  };
+  presets: {
+    /** Agent 预设名单（无 roster 组合返回空数组——渲染层据此隐藏选择器）。 */
+    list(): Promise<AgentPresetDto[]>;
+    /** 默认预设 id。 */
+    getDefault(): Promise<string | undefined>;
+    /** 设置默认预设（影响之后创建的会话）。 */
+    setDefault(id: string): Promise<void>;
+    /** 切换空白会话的预设（已开始的会话主进程拒绝并抛错）。 */
+    select(sessionId: string, presetId: string): Promise<void>;
   };
   interaction: {
     respondApproval(id: string, outcome: 'allowed-once' | 'rejected'): Promise<boolean>;
@@ -107,5 +129,17 @@ export interface ElectronBridge {
     pickDataPath(): Promise<PickDataPathResultDto>;
     /** 订阅设置变更推送；返回取消订阅函数。 */
     onChanged(listener: (settings: AppSettingsDto) => void): () => void;
+  };
+  mcp: {
+    /** MCP 服务器列表。 */
+    getAll(): Promise<McpServerDto[]>;
+    /** 新增（无 id）或编辑（有 id）服务器。 */
+    upsert(input: McpUpsertDto): Promise<McpServerDto>;
+    remove(id: string): Promise<void>;
+    setEnabled(id: string, enabled: boolean): Promise<void>;
+    /** 应用变更：harness 以新组合重启（返回重启后宿主状态）。 */
+    apply(): Promise<HostStateDto>;
+    /** 订阅列表变更推送；返回取消订阅函数。 */
+    onChanged(listener: (servers: McpServerDto[]) => void): () => void;
   };
 }

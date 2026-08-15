@@ -1,0 +1,123 @@
+# `cordis` agent preset（创造模式）：standard 的全部能力 + 读写自己运行
+# 所在的运行时。它存在的意义是让一个人可以请 agent 创作另一个 agent：
+# tool-cordis 读活运行时、挂临时插件、卸载之；随行技能教组合文件的写作。
+#
+# TRUST：tool-cordis 会在活运行时上执行模型写出的 JavaScript，且本 agent
+# 写出的组合会成为其他会话挂载的 preset——把创造模式的会话当作 shell
+# 访问权限对待。用户自建 preset 落在 $DSH_HOME/.agent-presets/<id>/；
+# 随附安装目录（本目录）不可编辑、升级即覆写。
+
+- id: persona
+  name: '../../../../deepseek-harness/packages/preset/persona/lib/index.js'
+  config:
+    text: |-
+      You are a coding agent powered by the {{model}} model, running on the DeepSeek Harness. Your working directory is {{cwd}}.
+
+      You can read and modify the harness you run on. Its composition is Cordis: every capability is a plugin row in a `cordis.yml`, and an agent preset is one such file mounted for a single session.
+
+      Two planes decide where an edit belongs. The HOST composition holds the registries and anything shared across sessions — persistence, the sandbox and approval stack, the model route, the subagent registry and its backends. An AGENT PRESET holds what one session contributes to those registries: its tools, its persona, its prompt sections. A row that publishes a service belongs in the host composition, or inside an `isolate` realm if the preset genuinely owns that service and nothing outside one agent reads it.
+
+      Presets you author live one directory per preset under `${DSH_HOME:-$HOME/.dsh}/.agent-presets/<id>/`; the roster reports each preset's real path, so take the one you edit from there. NEVER edit or delete the shipped preset install (the `agent-presets` directory beside the deployment's own config): it belongs to the deployment, an upgrade overwrites it, and corrupting the `cordis` preset would disable this very mode. To change what a shipped preset does, copy its composition into a new preset directory and edit the copy.
+
+      Load the `editing-cordis-compositions` skill before writing or changing a composition.
+
+- id: agent-instructions
+  name: '../../../../deepseek-harness/packages/context/agent-instructions/lib/index.js'
+  config:
+    maxBytes: 65536
+
+- id: tool-pwsh
+  name: '../../../../deepseek-harness/packages/shell/tool-pwsh/lib/index.js'
+
+- id: tool-fs
+  name: '../../../../deepseek-harness/packages/fs/tool-fs/lib/index.js'
+
+- id: tool-fs-search
+  name: '../../../../deepseek-harness/packages/fs/tool-fs-search/lib/index.js'
+  config:
+    sampleOverCapGlobResults: false
+
+# 组合创作技能随本预设迁移（skills/ 子目录），而非住在用户技能根：
+# 它记录的是本部署的两平面划分，preset 才是被复制与编辑的单元。
+# baseUrl 是本预设自己的目录，root 随 preset 安装位置解析。
+- id: skill-filesystem
+  name: '../../../../deepseek-harness/packages/skill/skill-filesystem/lib/index.js'
+  config:
+    customSkillDirs:
+      - !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
+
+- id: tool-skill
+  name: '../../../../deepseek-harness/packages/skill/tool-skill/lib/index.js'
+
+- id: planning
+  name: 'cordis:group'
+  group: true
+  isolate:
+    planMode: true
+  config:
+    - id: plan-mode
+      name: '../../../../deepseek-harness/packages/plan/plan-mode/lib/index.js'
+      config:
+        section: |
+              You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+              Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+              The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+              Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+              Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+              When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+
+- id: compaction
+  name: 'cordis:group'
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '../../../../deepseek-harness/packages/compaction/compaction-basic/lib/index.js'
+
+    - id: tool-result-pruner
+      name: '../../../../deepseek-harness/packages/compaction/compaction-tool-result-pruner/lib/index.js'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+- id: tool-subagent-control
+  name: '../../../../deepseek-harness/packages/subagent/tool-subagent-control/lib/index.js'
+
+- id: tool-subagent-list-agents
+  name: '../../../../deepseek-harness/packages/subagent/tool-subagent-control/lib/types/list-agents.js'
+
+- id: tool-subagent
+  name: '../../../../deepseek-harness/packages/subagent/tool-subagent/lib/index.js'
+  config:
+    provider: spawn
+    toolName: subagent
+    backgroundMode: continuable
+
+- id: tool-subagent-fork
+  name: '../../../../deepseek-harness/packages/subagent/tool-subagent/lib/index.js'
+  config:
+    provider: fork
+    toolName: subagent_fork
+    backgroundMode: one-shot
+
+- id: tool-ask-user
+  name: '../../../../deepseek-harness/packages/interaction/tool-ask-user/lib/index.js'
+
+- id: tool-todo
+  name: '../../../../deepseek-harness/packages/todo/tool-todo/lib/index.js'
+  config:
+    allowParallelInProgress: true
+
+# ── self-modification ────────────────────────────────────────────────────────
+
+# 读活运行时、挂临时插件、卸载之。该工具集是信任边界而非沙箱——见文件头。
+- id: tool-cordis
+  name: '../../../../deepseek-harness/packages/extensions/tool-cordis/lib/index.js'

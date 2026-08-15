@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { HarnessEventDto, HostStateDto, SessionSummaryDto } from '../../shared/protocol.js';
+import type {
+  AgentPresetDto,
+  HarnessEventDto,
+  HostStateDto,
+  SessionSummaryDto,
+  SubagentRunDto,
+} from '../../shared/protocol.js';
 import { requireBridge } from '../ipc/api';
 import { ChatView } from './ChatView';
 import { Composer } from './Composer';
@@ -28,6 +34,7 @@ import { getSessionLastActive, touchSessionActivity } from '../state/sessionActi
 /**
  * 对话工作台：会话侧栏 + 任务面板 + 对话流 + 输入区。
  * 多会话状态按 id 分桶折叠；打开历史会话走同一条事件折叠路径（回放=实时）。
+ * 子代理子会话事件同样按 id 入桶（跨会话聚合），卡片挂到父会话对话流。
  */
 
 interface Notice {
@@ -51,11 +58,19 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  /** 子代理运行（childSessionId → 视图；卡片挂父会话，transcript 读 states[childId]）。 */
+  const [subagents, setSubagents] = useState<Record<string, SubagentRunDto>>({});
+  /** Agent 预设名单与 roster 默认（宿主就绪后读取；空名单 = 未启用，隐藏选择器）。 */
+  const [presets, setPresets] = useState<AgentPresetDto[]>([]);
+  const [defaultPreset, setDefaultPreset] = useState('');
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
   const noticeTimer = useRef<number | null>(null);
   /** 已处理过的工作区（宿主就绪流按 workspace 变化识别项目切换）。 */
   const workspaceSeenRef = useRef('');
+  /** 上一次宿主状态：ready 之外的任何状态都意味着引擎重启（MCP 应用等），
+   * 回到 ready 时需要像切换工作区一样复位本地会话状态。 */
+  const hostStatusSeenRef = useRef<string>('booting');
   /** 切换项目后待打开的会话 id（点了其他项目的会话时）。 */
   const pendingOpenRef = useRef<string | null>(null);
   const localNames = useSessionNames();
@@ -80,12 +95,29 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
     }
   }, []);
 
+  /** 预设名单 + roster 默认（宿主就绪 / 引擎重启后读取）。 */
+  const refreshPresets = useCallback(async () => {
+    try {
+      const bridge = requireBridge();
+      const [list, def] = await Promise.all([bridge.presets.list(), bridge.presets.getDefault()]);
+      setPresets(list);
+      setDefaultPreset(def ?? '');
+    } catch (error) {
+      console.error('读取 Agent 预设失败', error);
+    }
+  }, []);
+
   const createSession = useCallback(async () => {
     const bridge = requireBridge();
-    const { sessionId } = await bridge.session.create();
-    setStates((previous) =>
-      previous[sessionId] === undefined ? previous : previous,
-    );
+    const { sessionId, agentPreset } = await bridge.session.create();
+    // 创建即 priming 预设（会话头的 agentPreset 回传；空白期切换经事件流覆盖）。
+    setStates((previous) => ({
+      ...previous,
+      [sessionId]: {
+        ...initialSessionState(),
+        ...(agentPreset !== undefined ? { agentPreset } : {}),
+      },
+    }));
     setActiveId(sessionId);
     void refreshSessions();
   }, [refreshSessions]);
@@ -112,11 +144,47 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
       if (states[sessionId] === undefined) {
         try {
           const events = await bridge.session.history(sessionId);
-          setStates((previous) => ({ ...previous, [sessionId]: foldEvents(initialSessionState(), events) }));
+          // 会话头预设作种子（空白期切换以 agent-preset/selected 事件 last-wins 覆盖）。
+          const seed = {
+            ...initialSessionState(),
+            ...(session?.agentPreset !== undefined ? { agentPreset: session.agentPreset } : {}),
+          };
+          setStates((previous) => ({ ...previous, [sessionId]: foldEvents(seed, events) }));
         } catch (error) {
           console.error('读取会话历史失败', error);
           setStates((previous) => ({ ...previous, [sessionId]: initialSessionState() }));
         }
+      }
+      // 子代理历史（冷数据）：子会话 transcript 一并回放（最近 20 个）。
+      try {
+        const runs = await bridge.session.subagents(sessionId);
+        if (runs.length === 0) return;
+        setSubagents((previous) => {
+          const next = { ...previous };
+          for (const run of runs) next[run.childSessionId] = run;
+          return next;
+        });
+        const missing = runs
+          .map((run) => run.childSessionId)
+          .filter((childId) => states[childId] === undefined);
+        if (missing.length === 0) return;
+        const transcripts = await Promise.allSettled(
+          missing.map((childId) => bridge.session.history(childId)),
+        );
+        setStates((previous) => {
+          const next = { ...previous };
+          transcripts.forEach((result, index) => {
+            const childId = missing[index];
+            if (childId === undefined) return;
+            next[childId] =
+              result.status === 'fulfilled'
+                ? foldEvents(initialSessionState(), result.value)
+                : (next[childId] ?? initialSessionState());
+          });
+          return next;
+        });
+      } catch (error) {
+        console.error('读取子代理目录失败', error);
       }
       try {
         await bridge.session.open(sessionId);
@@ -141,24 +209,34 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
     }
   }, [showNotice]);
 
-  // 宿主就绪流：首次启动或项目切换后，刷新列表并打开目标会话
+  // 宿主就绪流：首次启动 / 项目切换 / 引擎重启后，刷新列表并打开目标会话
   // （切换前点击的其他项目会话 > 当前工作区最近会话 > 新建）。
   useEffect(() => {
     const bridge = requireBridge();
     let disposed = false;
     const begin = async (state: HostStateDto): Promise<void> => {
       setHost(state);
-      if (state.status !== 'ready') return;
+      if (state.status !== 'ready') {
+        hostStatusSeenRef.current = state.status;
+        return;
+      }
+      // 引擎（重）启动后预设名单重读（用户根目录的新预设即时可见）。
+      void refreshPresets();
       const workspaceChanged = workspaceSeenRef.current !== state.workspace;
+      // 引擎重启（如 MCP 应用变更）：workspace 未变但 agent 已随停机销毁，
+      // 与项目切换同一条复位路径。
+      const engineRestarted = hostStatusSeenRef.current !== 'ready';
+      hostStatusSeenRef.current = 'ready';
       workspaceSeenRef.current = state.workspace;
-      if (workspaceChanged) {
-        // 旧工作区的 agent 已随切换停机销毁，状态与交互请求一并清空。
+      if (workspaceChanged || engineRestarted) {
+        // 旧组合的 agent 已随停机销毁，状态与交互请求一并清空。
         setStates({});
         setActiveId(null);
         setPendingApproval(null);
         setPendingQuestion(null);
+        setSubagents({});
       }
-      if (!workspaceChanged && activeIdRef.current !== null) return;
+      if (!workspaceChanged && !engineRestarted && activeIdRef.current !== null) return;
       try {
         const list = await bridge.session.list();
         if (disposed) return;
@@ -210,6 +288,12 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
           if (next === current) return previous;
           return { ...previous, [envelope.sessionId]: next };
         });
+        return;
+      }
+      if (envelope.kind === 'subagent-start' || envelope.kind === 'subagent-end') {
+        const run = envelope.run;
+        touchSessionActivity(run.childSessionId);
+        setSubagents((previous) => ({ ...previous, [run.childSessionId]: run }));
         return;
       }
       if (envelope.kind === 'approval-requested') {
@@ -279,6 +363,69 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
     await requireBridge().session.cancel(id);
   }, []);
 
+  /**
+   * 选择 Agent 预设：空白会话 → 切换当前会话（recompose + 事件记录）；
+   * 已开始的会话 → 设为之后新会话的默认（历史已在该预设的工具面下产出，
+   * 切换会抽出模型已调用的工具——harness 的仅空白可切锁）。
+   */
+  const handleSelectPreset = useCallback(
+    async (presetId: string) => {
+      const bridge = requireBridge();
+      const id = activeIdRef.current;
+      const state = id !== null ? states[id] : undefined;
+      const blank =
+        id !== null && (state?.messages.length ?? 0) === 0 && !(state?.running ?? false);
+      try {
+        if (id !== null && blank) {
+          await bridge.presets.select(id, presetId);
+          showNotice({ kind: 'ok', text: '已切换当前会话的 Agent 预设' });
+          return;
+        }
+        await bridge.presets.setDefault(presetId);
+        setDefaultPreset(presetId);
+        showNotice({ kind: 'ok', text: '当前会话预设已锁定；已设为之后新会话的默认' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('锁定')) {
+          // 空白判定与主进程竞态（回合恰在点击间隙开启）：降级为设默认。
+          try {
+            await bridge.presets.setDefault(presetId);
+            setDefaultPreset(presetId);
+            showNotice({ kind: 'ok', text: '已设为之后新会话的默认预设' });
+          } catch (fallbackError) {
+            showNotice({
+              kind: 'error',
+              text: `设置默认预设失败：${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+            });
+          }
+          return;
+        }
+        showNotice({ kind: 'error', text: `切换预设失败：${message}` });
+      }
+    },
+    [states, showNotice],
+  );
+
+  /** 派生会话（fork）：以父会话已完成回合为种子创建新会话并切换过去。 */
+  const handleFork = useCallback(
+    async (sessionId: string) => {
+      const bridge = requireBridge();
+      try {
+        const { sessionId: forkedId } = await bridge.session.fork(sessionId);
+        await refreshSessions();
+        // 历史按磁盘上的种子回放（截到最近一个已完成回合），不复制前端状态。
+        await openSession(forkedId);
+        showNotice({ kind: 'ok', text: '已派生新会话（继承到最近一个已完成回合）' });
+      } catch (error) {
+        showNotice({
+          kind: 'error',
+          text: `派生会话失败：${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    },
+    [openSession, refreshSessions, showNotice],
+  );
+
   /** 导出会话为 Markdown：状态缺失（未加载过）先拉历史回放。 */
   const handleExport = useCallback(
     async (sessionId: string) => {
@@ -306,11 +453,23 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
   );
 
   const activeState = activeId !== null ? states[activeId] : undefined;
+  const activeSummary = activeId !== null ? sessions.find((item) => item.id === activeId) : undefined;
   const hostReady = host?.status === 'ready';
+  /** 活动会话的预设：事件流（含 priming）> 会话头 > roster 默认。 */
+  const activePresetId =
+    activeState?.agentPreset ?? activeSummary?.agentPreset ?? (defaultPreset.length > 0 ? defaultPreset : undefined);
   /** 任一会话收到过 Agent 回复（侧栏引导第 3 步）。 */
   const hasReply = useMemo(
     () => Object.values(states).some((state) => state.messages.some((m) => m.role === 'assistant')),
     [states],
+  );
+  /** 活动会话的子代理运行（卡片挂在对话流尾部，transcript 读 states[childId]）。 */
+  const activeSubagents = useMemo(
+    () =>
+      activeId === null
+        ? []
+        : Object.values(subagents).filter((run) => run.parentSessionId === activeId),
+    [subagents, activeId],
   );
 
   return (
@@ -330,6 +489,7 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
         onCreate={() => void createSession()}
         onRename={(id, name) => setSessionName(id, name)}
         onExport={(id) => void handleExport(id)}
+        onFork={(id) => void handleFork(id)}
         onSwitchProject={(cwd) => void switchProject(cwd)}
         onOpenSettings={onOpenSettings}
       />
@@ -342,6 +502,8 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
               state={activeState ?? initialSessionState()}
               hostReady={hostReady}
               showThinking={settings.showThinking}
+              subagents={activeSubagents}
+              childStates={states}
             />
             {pendingApproval !== null && (
               <ApprovalCard approval={pendingApproval} onRespond={(id, outcome) => void handleApproval(id, outcome)} />
@@ -355,6 +517,14 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
               runningBehavior={settings.interactionBehavior}
               agentMode={settings.agentMode}
               onAgentModeChange={(mode) => updateAppSettings({ agentMode: mode })}
+              contextTokens={activeState?.contextTokens ?? null}
+              presets={presets}
+              activePresetId={activePresetId}
+              defaultPresetId={defaultPreset.length > 0 ? defaultPreset : undefined}
+              presetLocked={
+                (activeState?.messages.length ?? 0) > 0 || (activeState?.running ?? false)
+              }
+              onSelectPreset={(presetId) => void handleSelectPreset(presetId)}
               onOpenSettings={onOpenSettings}
               onSend={handleSend}
               onStop={handleStop}

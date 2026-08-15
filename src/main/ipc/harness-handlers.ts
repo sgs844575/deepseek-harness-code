@@ -16,8 +16,9 @@ export function registerHarnessHandlers(harness: HarnessService): void {
 
   ipcMain.handle(channels.models.list, (_event, provider: string) => harness.listModels(provider));
 
-  ipcMain.handle(channels.session.create, (_event, options?: { model?: string }) =>
-    harness.createSession(options).then((sessionId) => ({ sessionId })),
+  ipcMain.handle(
+    channels.session.create,
+    (_event, options?: { model?: string; preset?: string }) => harness.createSession(options),
   );
 
   ipcMain.handle(channels.session.open, (_event, sessionId: string) => harness.openSession(sessionId));
@@ -36,6 +37,27 @@ export function registerHarnessHandlers(harness: HarnessService): void {
 
   ipcMain.handle(channels.session.cancel, (_event, sessionId: string) =>
     harness.cancel(sessionId),
+  );
+
+  ipcMain.handle(channels.session.fork, (_event, sessionId: string) =>
+    harness.forkSession(sessionId).then((forkedId) => ({ sessionId: forkedId })),
+  );
+
+  ipcMain.handle(channels.session.subagents, (_event, sessionId: string) =>
+    harness.listSubagents(sessionId),
+  );
+
+  // Agent 预设：名单 / 默认值 / 空白会话切换（recompose + 事件记录）。
+  ipcMain.handle(channels.presets.list, () => harness.listPresets());
+
+  ipcMain.handle(channels.presets.getDefault, () => harness.getDefaultPreset());
+
+  ipcMain.handle(channels.presets.setDefault, (_event, id: string) =>
+    harness.setDefaultPreset(id),
+  );
+
+  ipcMain.handle(channels.presets.select, (_event, sessionId: string, presetId: string) =>
+    harness.switchSessionPreset(sessionId, presetId),
   );
 
   ipcMain.handle(

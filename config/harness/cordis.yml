@@ -1,9 +1,17 @@
-# DeepSeek Harness Code —— 客户端 agent 组合（Windows 最小 zcode 级配置）
+# DeepSeek Harness Code —— 客户端宿主组合（Windows 最小 zcode 级配置）
 #
 # 集成方式：Electron 主进程直接调用 @deepseek-ai/dsh-app-boot 的 boot()，
 # 以本文件为配置入口。所有官方插件用相对路径直连 deepseek-harness 仓库的
 # 构建产物（lib/index.js），绕过包管理器解析；我们自己的插件放在
 # ./plugins/ 下（相对路径同样基于本文件所在目录）。
+#
+# 平面划分（对齐 harness web-app bundle 的 preset 化部署形态）：
+# 本文件只保留 HOST 平面——注册表、提供方、守卫、持久化与人机协作面；
+# 模型面（工具、persona、提示段、压缩、计划模式、子代理工具）全部下沉到
+# config/harness/agent-presets/ 下的 Agent 预设，每个会话按所选预设组装
+# （scope 链 agent → preset → global，近者遮蔽远者）。默认预设 plugin
+# （插件模式）= 迁移前的完整工具面，行为不变；standard / code / minimal /
+# cordis 对应官方 CLI 随附的四档（标准 / PTC / 极简 / 创造模式）。
 #
 # 平台说明：Windows 下 shell 工具走 pwsh（toolBash: false 关闭 bash 行）；
 # subprocess 服务由自写的 subprocess-child 提供（child_process 实现，
@@ -36,24 +44,29 @@
 - id: shell-env
   name: '../../deepseek-harness/packages/shell/shell-env/lib/index.js'
 
-# agent 主干：内部挂载 llm / session / tools / agent / agent-loop / 系统
-# 提示词装配 / 会话标题 / llm-retry / invariants 等子插件。
+# agent 主干（HOST 平面）：llm / 会话 / 工具注册表 / agent 注册表 /
+# agent-loop / 系统提示装配 / 会话标题 / llm-retry / invariants。
+# 模型面子件已全部关闭——workspaceContext 与技能提供方/工具、bash 行、
+# jobs 工具、goals 都改由各预设自带；persona 文本保留为未加入预设的
+# agent 的部署默认值（plugin 预设不挂 persona 行即继承此文本）。
 - id: agent-spine
   name: '../../deepseek-harness/packages/examples/agent-spine-demo/lib/index.js'
   config:
     persona: >-
       You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
-    workspaceContext:
-      maxBytes: 65536
+    workspaceContext: false
     skills:
       enabled: false
     toolBash: false
     toolJobs: false
     goals: false
 
-- id: tool-pwsh
-  name: '../../deepseek-harness/packages/shell/tool-pwsh/lib/index.js'
+# 技能注册表（HOST 层，分层注册）：预设的 skill-filesystem 把本地根目录
+# 发现注册进该预设的层，tool-skill 给它的 agent 目录与加载器。
+- id: skills
+  name: '../../deepseek-harness/packages/skill/skill/lib/index.js'
 
+# fs 提供方与观察策略（HOST 层；沙箱 boot 补丁按 id 直替 fs-local）
 - id: fs-local
   name: '../../deepseek-harness/packages/fs/fs-local/lib/index.js'
   config:
@@ -62,49 +75,33 @@
 - id: fs-observation-policy
   name: '../../deepseek-harness/packages/fs/fs-observation-policy/lib/index.js'
 
-- id: tool-fs
-  name: '../../deepseek-harness/packages/fs/tool-fs/lib/index.js'
+# 子代理注册表与进程内 provider（HOST 单例：跨会话查询面 + provider 名
+# 全局唯一）；模型面的委托工具（subagent / subagent_fork / 控制面）在预设。
+# report 保持 HOST：在单例上注册 continuable setup，与 preset 无关。
+- id: subagent
+  name: '../../deepseek-harness/packages/subagent/subagent/lib/index.js'
 
-- id: tool-fs-search
-  name: '../../deepseek-harness/packages/fs/tool-fs-search/lib/index.js'
+- id: subagent-spawn-in-process
+  name: '../../deepseek-harness/packages/subagent/subagent-spawn-in-process/lib/index.js'
   config:
-    sampleOverCapGlobResults: false
+    providerName: spawn
 
-- id: str-replace-editor
-  name: '../../deepseek-harness/packages/fs/tool-str-replace-editor/lib/index.js'
+- id: subagent-fork-in-process
+  name: '../../deepseek-harness/packages/subagent/subagent-fork-in-process/lib/index.js'
   config:
-    maxOutputChars: 16000
+    providerName: fork
 
-- id: tool-todo
-  name: '../../deepseek-harness/packages/todo/tool-todo/lib/index.js'
-  config:
-    allowParallelInProgress: true
+- id: tool-subagent-report
+  name: '../../deepseek-harness/packages/subagent/tool-subagent-report/lib/index.js'
 
-# 人机协作面：工具审批 + 向用户提问 + 计划模式
+# 人机协作面（HOST 层）：工具审批 + 向用户提问；tool-ask-user 工具在预设。
 - id: approval
   name: '../../deepseek-harness/packages/interaction/user-approval/lib/index.js'
 
 - id: user-questions
   name: '../../deepseek-harness/packages/interaction/user-questions/lib/index.js'
 
-- id: tool-ask-user
-  name: '../../deepseek-harness/packages/interaction/tool-ask-user/lib/index.js'
-
-# harness 原生计划模式：激活时每个请求附带 plan:policy 系统提示段，
-# exit_plan_mode 工具把完成的计划提交用户审阅；状态经 plan/mode 事件持久化。
-- id: plan-mode
-  name: '../../deepseek-harness/packages/plan/plan-mode/lib/index.js'
-  config:
-    section: >-
-      You are in PLAN MODE. You must not modify anything: file-writing tools and
-      state-changing shell commands are denied in this mode. Restrict yourself
-      to reading, searching and analyzing the codebase, then produce a clear,
-      actionable implementation plan: goals, concrete steps, files to create or
-      change, and risks. When the plan is ready, call the exit_plan_mode tool
-      to present it to the user for review; implementation may begin only after
-      the user approves the plan.
-
-# 守卫与输出治理
+# 守卫与输出治理（HOST 层）
 - id: repeat-tool-reminder
   name: '../../deepseek-harness/packages/guard/repeat-tool-reminder/lib/index.js'
   config:
@@ -122,23 +119,8 @@
   config:
     maxInlineBytes: 50000
 
-- id: tool-result-pruner
-  name: '../../deepseek-harness/packages/compaction/compaction-tool-result-pruner/lib/index.js'
-  config:
-    thresholdChars: 8192
-    headChars: 4096
-    tailChars: 1024
-
 - id: token-meter
   name: '../../deepseek-harness/packages/llm/token-meter/lib/index.js'
-
-- id: compaction-basic
-  name: '../../deepseek-harness/packages/compaction/compaction-basic/lib/index.js'
-  config:
-    thresholdRatio: 0.8
-    retainRatio: 0.16
-    maxTokens: 8192
-    compactionRetries: 1
 
 # 会话持久化：root 固定在 DSH_HOME/sessions（主进程把 DSH_HOME 指到应用
 # userData），compression none 避免引入 zstd 压缩帧（读回走纯 jsonl）。
@@ -150,3 +132,27 @@
 
 - id: session-checkpoints
   name: '../../deepseek-harness/packages/session/session-checkpoint-policy/lib/index.js'
+
+# PTC（Code Mode）的 TypeScript 运行时：HOST 单例 worker 线程，
+# code 预设的 tool-presentation 行按 agent 启用呈现。
+- id: code-runtime
+  name: '../../deepseek-harness/packages/code-runtime/code-runtime-worker-thread/lib/index.js'
+
+# 创造模式的运行时读写面：动态包定义注册表与模型挂载双面包的宿主半
+# （dynamicCordisRunner / cordisInspect 服务；cordis 预设的 tool-cordis 行注入）。
+- id: cordis-host-runner
+  name: '../../deepseek-harness/packages/extensions/cordis-host-runner/lib/index.js'
+
+# Agent 预设 roster：随附根目录（本配置目录旁的 agent-presets/，system
+# 信任）+ 用户根目录 $DSH_HOME/.agent-presets（includeUserRoot 默认追加，
+# 创作模式写出的预设落在那里）。DSH_CONFIG_DIR 由主进程在 boot 前设置
+# （= 本文件所在目录），冒烟脚本同样设置。
+- id: agent-presets
+  name: '../../deepseek-harness/packages/preset/agent-presets/lib/index.js'
+  config:
+    default: plugin
+    roots:
+      - path: !!js >-
+          process.getBuiltinModule('node:path').join(
+            process.env.DSH_CONFIG_DIR ?? process.cwd(), 'agent-presets')
+        trust: system

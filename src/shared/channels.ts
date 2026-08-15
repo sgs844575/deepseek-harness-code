@@ -41,8 +41,22 @@ export const channels = {
     history: 'session:history',
     prompt: 'session:prompt',
     cancel: 'session:cancel',
+    /** 派生会话：以父会话已完成回合为种子创建新会话。 */
+    fork: 'session:fork',
+    /** 父会话的子代理目录（冷数据）。 */
+    subagents: 'session:subagents',
     /** 主进程 → 渲染层的事件流推送（统一信封）。 */
     event: 'session:event',
+  },
+  presets: {
+    /** Agent 预设名单（无 roster 组合返回空数组）。 */
+    list: 'presets:list',
+    /** 默认预设（未指定时新会话挂载它）。 */
+    getDefault: 'presets:get-default',
+    /** 设置默认预设（影响之后创建的会话）。 */
+    setDefault: 'presets:set-default',
+    /** 切换空白会话的预设（已开始的会话拒绝：agent-preset-locked 语义）。 */
+    select: 'presets:select',
   },
   interaction: {
     respondApproval: 'interaction:respond-approval',
@@ -86,6 +100,20 @@ export const channels = {
     /** 主进程 → 渲染层：设置变更推送。 */
     changed: 'app-settings:changed',
   },
+  mcp: {
+    /** 服务器列表快照。 */
+    getAll: 'mcp:get-all',
+    /** 新增 / 编辑服务器。 */
+    upsert: 'mcp:upsert',
+    /** 删除服务器。 */
+    remove: 'mcp:remove',
+    /** 启停服务器（不改其余字段）。 */
+    setEnabled: 'mcp:set-enabled',
+    /** 应用变更：harness 停机并以新组合重启。 */
+    apply: 'mcp:apply',
+    /** 主进程 → 渲染层：列表变更推送。 */
+    changed: 'mcp:changed',
+  },
 } as const;
 
 export type AppChannel = (typeof channels.app)[keyof typeof channels.app];
@@ -93,10 +121,12 @@ export type WindowChannel = (typeof channels.window)[keyof typeof channels.windo
 export type HostChannel = (typeof channels.host)[keyof typeof channels.host];
 export type ModelsChannel = (typeof channels.models)[keyof typeof channels.models];
 export type SessionChannel = (typeof channels.session)[keyof typeof channels.session];
+export type PresetChannel = (typeof channels.presets)[keyof typeof channels.presets];
 export type InteractionChannel = (typeof channels.interaction)[keyof typeof channels.interaction];
 export type SettingsChannel = (typeof channels.settings)[keyof typeof channels.settings];
 export type ProviderChannel = (typeof channels.providers)[keyof typeof channels.providers];
 export type AppSettingsChannel = (typeof channels.appSettings)[keyof typeof channels.appSettings];
+export type McpChannel = (typeof channels.mcp)[keyof typeof channels.mcp];
 
 /** 全部合法通道的字面量联合，供校验使用。 */
 export type IpcChannel =
@@ -105,7 +135,9 @@ export type IpcChannel =
   | HostChannel
   | ModelsChannel
   | SessionChannel
+  | PresetChannel
   | InteractionChannel
   | SettingsChannel
   | ProviderChannel
-  | AppSettingsChannel;
+  | AppSettingsChannel
+  | McpChannel;

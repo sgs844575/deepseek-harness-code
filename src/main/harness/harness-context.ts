@@ -38,6 +38,13 @@ export interface UserMessage {
 export interface Agent {
   id: string;
   status: 'idle' | 'running';
+  /** agent 的 scope 上下文（opaque）：Agent 预设认父 / recompose 的句柄。 */
+  ctx: unknown;
+  /** agent 的活会话：空白检查（无 turn/start）与预设切换事件的落点。 */
+  session: {
+    events: { type: string }[];
+    append(type: 'agent-preset/selected', data: { agentPreset: string }): Promise<void> | void;
+  };
   followup(message: UserMessage): void;
   steer(message: UserMessage): void;
   cancel(cause: { kind: string }, options?: { keepInbox?: boolean }): void;
@@ -55,6 +62,26 @@ export interface PersistedSessionHeader {
   createdAt: number;
   cwd?: string;
   origin?: string;
+  /** 子代理会话的委托方父会话（origin === 'subagent' 时存在）。 */
+  parentSession?: string;
+  /** 会话创建时加入的 Agent 预设（空白期切换以 agent-preset/selected 事件为准）。 */
+  agentPreset?: string;
+}
+
+/** dsh-agent-presets 的 AgentPreset（发现结果的裁剪视图）。 */
+export interface AgentPresetInfo {
+  /** 预设 id = 目录名（[a-z0-9][a-z0-9-]*）。 */
+  id: string;
+  /** 展示名（preset.yml；缺失回退 id）。 */
+  name?: string;
+  /** 展示描述。 */
+  description?: string;
+  /** 所在根目录的信任级别（system = 随部署，user = 本地创作）。 */
+  trust: 'system' | 'user';
+  /** 组装文件绝对路径。 */
+  path: string;
+  /** 无法组装的原因（发现期形状检查；原样展示）。 */
+  broken?: string;
 }
 
 /** 不可变会话检查结果（不恢复、不发布 agent）。 */
@@ -71,18 +98,43 @@ export interface HarnessContext {
   agents: {
     create(options: {
       sessionId: string;
-      meta?: { cwd?: string };
+      meta?: { cwd?: string; agentPreset?: string };
       agentOptions?: { provider?: string; model?: string; reasoningEffort?: string };
+      /** 会话种子（fork / 子代理）：从 seq 0 连续的事件前缀，成为子会话历史。 */
+      seed?: SessionEvent[];
+      /**
+       * 创建期组装钩子（agent 工厂在发布前 await）：Agent 预设的
+       * agentPresets.mount(agentCtx, id) 在这里调用，拒绝即回滚整个创建。
+       */
+      setup?: (agentCtx: unknown) => void | Promise<void>;
     }): Promise<AgentHandle>;
     resume(options: {
       resumeSessionId: string;
       agentOptions?: { provider?: string; model?: string; reasoningEffort?: string };
+      /** 恢复期组装钩子：按会话记录的预设重建（resolveSessionPreset 语义）。 */
+      setup?: (agentCtx: unknown) => void | Promise<void>;
     }): Promise<AgentHandle>;
   };
-  /** 持久化会话读取（列表与免恢复检查）。 */
+  /** 不可变会话检查结果（不恢复、不发布 agent）。 */
   sessionPersistence: {
     list(): Promise<PersistedSessionHeader[]>;
     inspect(id: string): Promise<SessionInspection>;
+  };
+  /**
+   * Agent 预设 roster（host 组合携带 agent-presets 行时存在）。
+   * 方法面按 dsh-agent-presets 服务裁剪；AgentPresetInfo 为其 AgentPreset 视图。
+   */
+  agentPresets?: {
+    /** 调用方未指定时挂载的预设 id（settings 命名空间 agent-presets 热读）。 */
+    readonly defaultId: string;
+    list(): Promise<AgentPresetInfo[]>;
+    resolve(id?: string): Promise<AgentPresetInfo>;
+    /** 组装一个 agent（仅工厂 setup 钩子内调用）；损坏预设以发现原因拒绝。 */
+    mount(agentCtx: unknown, id?: string): Promise<AgentPresetInfo>;
+    /** 空白会话切换预设（重链 scope 父；调用方负责空白检查与事件记录）。 */
+    recompose(agentCtx: unknown, id: string): Promise<AgentPresetInfo>;
+    /** 宿主侧读取某 agent 预设内 isolate realm 服务的唯一通道（如 planMode）。 */
+    serviceFor(agent: { ctx: unknown }, name: string): unknown;
   };
   /** ask_user_question 的提供者注册面。 */
   userQuestions: {
@@ -107,8 +159,11 @@ export interface HarnessContext {
   approval: {
     setPolicy(agent: Agent, policy: 'ask' | 'never'): void;
   };
-  /** harness 原生计划模式：激活时每个请求附带 plan:policy 提示段。 */
-  planMode: {
+  /** harness 原生计划模式：激活时每个请求附带 plan:policy 提示段。
+   * （预设化后 planMode 服务在预设的 isolate realm 内，宿主侧经
+   * agentPresets.serviceFor(agent, 'planMode') 访问；此处仅为无 roster
+   * 组合的兜底，通常为 undefined。） */
+  planMode?: {
     /** 返回 committed / queued / cancelled / noop（回合开启中排队到下一步生效）。 */
     set(agent: Agent, active: boolean): string;
   };
@@ -118,6 +173,22 @@ export interface HarnessContext {
   };
   on(event: 'session/event', listener: (session: { id: string }, event: SessionEvent) => void): void;
   on(event: 'agent/status', listener: (payload: { agent: { id: string }; status: string }) => void): void;
+  /** 子代理运行生命周期（payload 为 dsh-subagent 的 SubagentRunInfo 裁剪视图）。 */
+  on(
+    event: 'subagent/start',
+    listener: (info: { runId: string; provider: string; id: string; local: boolean }) => void,
+  ): void;
+  on(
+    event: 'subagent/end',
+    listener: (info: {
+      runId: string;
+      provider: string;
+      id: string;
+      local: boolean;
+      stopReason: string;
+      lastAssistantMessage?: unknown;
+    }) => void,
+  ): void;
   on(
     event: 'tools/pre-execute',
     listener: (

@@ -1,0 +1,114 @@
+# `plugin` agent preset（插件模式）：DSHC 迁移到 Agent 预设前的完整模型面，
+# 自 config/harness/cordis.yml 原 HOST 组合整段迁移而来，行为不变。
+# persona 不单挂行——继承宿主 agent-spine 的部署默认文本（即迁移前的
+# {{model}} / {{cwd}} 主干 persona），与 plugin 模式的既有体验一致。
+#
+# 插件相对路径基于本文件所在目录（config/harness/agent-presets/plugin/），
+# 与宿主 cordis.yml 同风格直连仓库构建产物，打包布局下同样成立。
+
+- id: agent-instructions
+  name: '../../../../deepseek-harness/packages/context/agent-instructions/lib/index.js'
+  config:
+    maxBytes: 65536
+
+# 技能目录（SKILL.md）自动发现 + 会话内技能目录注入：
+# 项目 <workspace>/.dsh/skills 与 .agents/skills、用户 $DSH_HOME/skills。
+- id: skill-filesystem
+  name: '../../../../deepseek-harness/packages/skill/skill-filesystem/lib/index.js'
+
+- id: tool-skill
+  name: '../../../../deepseek-harness/packages/skill/tool-skill/lib/index.js'
+
+- id: tool-pwsh
+  name: '../../../../deepseek-harness/packages/shell/tool-pwsh/lib/index.js'
+
+- id: tool-fs
+  name: '../../../../deepseek-harness/packages/fs/tool-fs/lib/index.js'
+
+- id: tool-fs-search
+  name: '../../../../deepseek-harness/packages/fs/tool-fs-search/lib/index.js'
+  config:
+    sampleOverCapGlobResults: false
+
+- id: str-replace-editor
+  name: '../../../../deepseek-harness/packages/fs/tool-str-replace-editor/lib/index.js'
+  config:
+    maxOutputChars: 16000
+
+- id: tool-todo
+  name: '../../../../deepseek-harness/packages/todo/tool-todo/lib/index.js'
+  config:
+    allowParallelInProgress: true
+
+# harness 原生计划模式：激活时每个请求附带 plan:policy 系统提示段，
+# exit_plan_mode 工具把完成的计划提交用户审阅；状态经 plan/mode 事件持久化。
+# planMode 服务是 agent 生命周期，entry-local realm 是正确归属。
+- id: planning
+  name: 'cordis:group'
+  group: true
+  isolate:
+    planMode: true
+  config:
+    - id: plan-mode
+      name: '../../../../deepseek-harness/packages/plan/plan-mode/lib/index.js'
+      config:
+        section: >-
+          You are in PLAN MODE. You must not modify anything: file-writing tools and
+          state-changing shell commands are denied in this mode. Restrict yourself
+          to reading, searching and analyzing the codebase, then produce a clear,
+          actionable implementation plan: goals, concrete steps, files to create or
+          change, and risks. When the plan is ready, call the exit_plan_mode tool
+          to present it to the user for review; implementation may begin only after
+          the user approves the plan.
+
+# 压缩：compaction-basic 读 toolResultPrune（ctx.get），两者须共享 realm；
+# token-meter 留在 HOST，此处解析同一实例。
+- id: compaction
+  name: 'cordis:group'
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '../../../../deepseek-harness/packages/compaction/compaction-basic/lib/index.js'
+      config:
+        thresholdRatio: 0.8
+        retainRatio: 0.16
+        maxTokens: 8192
+        compactionRetries: 1
+
+    - id: tool-result-pruner
+      name: '../../../../deepseek-harness/packages/compaction/compaction-tool-result-pruner/lib/index.js'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+# 子代理委托工具：解析 HOST 的 subagents 注册表（spawn / fork 进程内
+# provider）。fork 保持 one-shot：continuable 子的 report 工具与提示段会
+# 前置于被继承的历史，破坏 fork 存在的意义。
+- id: tool-subagent-control
+  name: '../../../../deepseek-harness/packages/subagent/tool-subagent-control/lib/index.js'
+
+- id: tool-subagent-list-agents
+  name: '../../../../deepseek-harness/packages/subagent/tool-subagent-control/lib/types/list-agents.js'
+
+- id: tool-subagent
+  name: '../../../../deepseek-harness/packages/subagent/tool-subagent/lib/index.js'
+  config:
+    provider: spawn
+    toolName: subagent
+    # 后台委托默认 continuable：子代理驻留可续写，结算通知回传父会话。
+    backgroundMode: continuable
+
+- id: tool-subagent-fork
+  name: '../../../../deepseek-harness/packages/subagent/tool-subagent/lib/index.js'
+  config:
+    provider: fork
+    toolName: subagent_fork
+    backgroundMode: one-shot
+
+# 向用户提问（解析 HOST 的 userQuestions 注册表）
+- id: tool-ask-user
+  name: '../../../../deepseek-harness/packages/interaction/tool-ask-user/lib/index.js'

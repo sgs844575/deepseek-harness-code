@@ -29,6 +29,8 @@ export interface SessionEventDto {
 export type HarnessEventDto =
   | { kind: 'session-event'; sessionId: string; event: SessionEventDto }
   | { kind: 'agent-status'; sessionId: string; status: string }
+  | { kind: 'subagent-start'; run: SubagentRunDto }
+  | { kind: 'subagent-end'; run: SubagentRunDto }
   | InteractionDto;
 
 /** 发送用户输入的模式。 */
@@ -39,6 +41,72 @@ export interface SessionSummaryDto {
   id: string;
   createdAt: number;
   cwd?: string;
+  /** 会话创建时加入的 Agent 预设（空白期切换以事件流为准）。 */
+  agentPreset?: string;
+}
+
+/* ---- Agent 预设（roster 名单，config/harness/agent-presets + 用户根） ---- */
+
+/** Agent 预设条目（dsh-agent-presets 发现结果的裁剪视图）。 */
+export interface AgentPresetDto {
+  /** 预设 id = 目录名。 */
+  id: string;
+  /** 展示名（preset.yml；缺失回退 id）。 */
+  name?: string;
+  description?: string;
+  /** system = 随部署；user = $DSH_HOME/.agent-presets 本地创作。 */
+  trust: 'system' | 'user';
+  /** 无法组装的原因（发现期形状检查，原样展示）。 */
+  broken?: string;
+}
+
+/* ---- 子代理（subagent 委托的子会话） ---- */
+
+/** 子代理运行状态（running = 未收到 end；ended 后附结束原因与摘要）。 */
+export interface SubagentRunDto {
+  /** 子会话 id（transcript 按会话事件流折叠，keyed by 该 id）。 */
+  childSessionId: string;
+  /** 委托方父会话 id（卡片挂在父会话对话流下）。 */
+  parentSessionId: string;
+  /** subagent/descriptor 的 label（模型给的委托描述）。 */
+  label: string;
+  status: 'running' | 'ended';
+  /** harness subagent/end 的 stopReason（completed / aborted / error / …）。 */
+  endReason?: string;
+  /** 结束时的最后一条助手消息（有则展示）。 */
+  summary?: string;
+}
+
+/* ---- MCP 服务器（mcp-servers.json，boot 补丁注入 mcp-client 插件行） ---- */
+
+export interface McpServerDto {
+  id: string;
+  /** harness serverName = 工具命名空间 mcp__<name>__*，全局唯一。 */
+  name: string;
+  transport: 'stdio' | 'streamable-http';
+  enabled: boolean;
+  /* stdio */
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  cwd: string;
+  /* streamable-http */
+  url: string;
+  headers: Record<string, string>;
+}
+
+/** 新增 / 编辑 MCP 服务器输入（编辑必须带 id；缺失字段归空）。 */
+export interface McpUpsertDto {
+  id?: string;
+  name: string;
+  transport: 'stdio' | 'streamable-http';
+  enabled?: boolean;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  url?: string;
+  headers?: Record<string, string>;
 }
 
 /* ---- 人机交互（审批 / 提问） ---- */
@@ -79,6 +147,8 @@ export interface ApiKeyEntryDto {
 export interface ProviderModelDto {
   id: string;
   name?: string;
+  /** 上下文窗口（token 数；llm-deepseek 目录字段，缺省回落 defaultContextWindow）。 */
+  contextWindow?: number;
 }
 
 /** 供应商（渲染层视图）。 */
@@ -105,6 +175,10 @@ export type ReasoningEffortDto = 'off' | 'high' | 'max';
 export interface ProviderPrefsDto {
   thinking: ThinkingModeDto;
   reasoningEffort: ReasoningEffortDto;
+  /** 单次请求最大输出 tokens（llm-deepseek maxTokens；缺省 = 256K）。 */
+  maxTokens?: number;
+  /** 模型未声明时的上下文窗口兜底（llm-deepseek defaultContextWindow；缺省 = 1M）。 */
+  contextWindow?: number;
 }
 
 /** providers.* 通道的完整快照。 */
@@ -179,6 +253,8 @@ export interface AppSettingsDto {
   dataPath: string;
   /** 已注册项目列表（添加项目 / 切换工作区用）。 */
   projects: ProjectEntryDto[];
+  /** 沙箱栈（Windows ACL 读写约束 pwsh / fs 工具；重启应用后生效，默认关闭）。 */
+  sandboxEnabled: boolean;
 }
 
 /** 选择文件夹的结果（创建项目的源目录选择）。 */

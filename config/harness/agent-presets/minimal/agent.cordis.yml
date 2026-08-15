@@ -1,0 +1,35 @@
+# `minimal` agent preset（极简模式）：固定提示词、双工具的编码 Agent。
+# persona 即完整系统提示（complete），后续装配监听不再追加提示文本；
+# 运行时上下文快照对本预设关闭；无上下文压缩。
+#
+# 与官方 minimal 的差异：官方以持久 bash（dsh-terminal PTY）为壳，本客户端
+# 的 subprocess-child 不提供 PTY（Electron 原生 ABI 禁忌），以一次性 pwsh
+# 代替；编辑器保持 str_replace_editor，本地文件系统在 entry-local realm
+# 内遮蔽宿主的沙箱提供方。
+
+- id: persona
+  name: '../../../../deepseek-harness/packages/preset/persona/lib/index.js'
+  config:
+    text: You are a helpful software engineer assistant.
+    complete: true
+    includeRuntimeContext: false
+
+- id: tool-pwsh
+  name: '../../../../deepseek-harness/packages/shell/tool-pwsh/lib/index.js'
+
+# 裸本地文件系统仅对本预设遮蔽宿主提供方；编辑器共享该 realm，要求绝对路径。
+- id: filesystem
+  name: 'cordis:group'
+  group: true
+  isolate:
+    fs: true
+  config:
+    - id: fs-local
+      name: '../../../../deepseek-harness/packages/fs/fs-local/lib/index.js'
+      config:
+        cwd: !!js process.env.DSH_CWD ?? process.cwd()
+
+    - id: str-replace-editor
+      name: '../../../../deepseek-harness/packages/fs/tool-str-replace-editor/lib/index.js'
+      config:
+        maxOutputChars: 16000

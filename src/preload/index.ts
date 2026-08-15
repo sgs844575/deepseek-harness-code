@@ -2,9 +2,12 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { channels } from '../shared/channels.js';
 import type { ElectronBridge } from '../shared/bridge.js';
 import type {
+  AgentPresetDto,
   AppSettingsDto,
   HarnessEventDto,
   HostStateDto,
+  McpServerDto,
+  McpUpsertDto,
   ProviderPrefsDto,
   ProviderSnapshotDto,
   ProviderUpsertDto,
@@ -54,13 +57,16 @@ const bridge: ElectronBridge = {
     list: (provider: string) => ipcRenderer.invoke(channels.models.list, provider),
   },
   session: {
-    create: (options?: { model?: string }) => ipcRenderer.invoke(channels.session.create, options),
+    create: (options?: { model?: string; preset?: string }) =>
+      ipcRenderer.invoke(channels.session.create, options),
     open: (sessionId: string) => ipcRenderer.invoke(channels.session.open, sessionId),
     list: () => ipcRenderer.invoke(channels.session.list),
     history: (sessionId: string) => ipcRenderer.invoke(channels.session.history, sessionId),
     prompt: (sessionId: string, text: string, options?: { mode?: 'queue' | 'steer' }) =>
       ipcRenderer.invoke(channels.session.prompt, sessionId, text, options),
     cancel: (sessionId: string) => ipcRenderer.invoke(channels.session.cancel, sessionId),
+    fork: (sessionId: string) => ipcRenderer.invoke(channels.session.fork, sessionId),
+    subagents: (sessionId: string) => ipcRenderer.invoke(channels.session.subagents, sessionId),
     onEvent: (listener: (envelope: HarnessEventDto) => void) => {
       const handler = (_event: unknown, envelope: HarnessEventDto): void => listener(envelope);
       ipcRenderer.on(channels.session.event, handler);
@@ -68,6 +74,13 @@ const bridge: ElectronBridge = {
         ipcRenderer.removeListener(channels.session.event, handler);
       };
     },
+  },
+  presets: {
+    list: (): Promise<AgentPresetDto[]> => ipcRenderer.invoke(channels.presets.list),
+    getDefault: (): Promise<string | undefined> => ipcRenderer.invoke(channels.presets.getDefault),
+    setDefault: (id: string): Promise<void> => ipcRenderer.invoke(channels.presets.setDefault, id),
+    select: (sessionId: string, presetId: string): Promise<void> =>
+      ipcRenderer.invoke(channels.presets.select, sessionId, presetId),
   },
   interaction: {
     respondApproval: (id: string, outcome: 'allowed-once' | 'rejected') =>
@@ -118,6 +131,21 @@ const bridge: ElectronBridge = {
       ipcRenderer.on(channels.appSettings.changed, handler);
       return () => {
         ipcRenderer.removeListener(channels.appSettings.changed, handler);
+      };
+    },
+  },
+  mcp: {
+    getAll: () => ipcRenderer.invoke(channels.mcp.getAll),
+    upsert: (input: McpUpsertDto) => ipcRenderer.invoke(channels.mcp.upsert, input),
+    remove: (id: string) => ipcRenderer.invoke(channels.mcp.remove, id),
+    setEnabled: (id: string, enabled: boolean) =>
+      ipcRenderer.invoke(channels.mcp.setEnabled, id, enabled),
+    apply: () => ipcRenderer.invoke(channels.mcp.apply),
+    onChanged: (listener: (servers: McpServerDto[]) => void) => {
+      const handler = (_event: unknown, servers: McpServerDto[]): void => listener(servers);
+      ipcRenderer.on(channels.mcp.changed, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.mcp.changed, handler);
       };
     },
   },
