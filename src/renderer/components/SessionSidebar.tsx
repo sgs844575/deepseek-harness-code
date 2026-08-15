@@ -94,6 +94,8 @@ export function SessionSidebar({
   const archived = useArchivedSessions();
   const { settings, update } = useAppSettings();
   const { snapshot: providerSnapshot } = useProviders();
+  /** 启用中的自动化任务数（导航徽标；0 不显示）。 */
+  const enabledAutomations = settings.automations.filter((item) => item.enabled).length;
 
   useEffect(() => {
     void requireBridge().app.getVersion().then(setVersion).catch(() => setVersion(''));
@@ -461,6 +463,18 @@ export function SessionSidebar({
           <span className="sb-nav__label">已归档</span>
           {archivedList.length > 0 && (
             <span className="sb-nav__count">{archivedList.length}</span>
+          )}
+        </button>
+        <button
+          type="button"
+          className="sb-nav__item"
+          title="定时任务：到点在当前工作区自动执行"
+          onClick={() => onOpenSettings('automation')}
+        >
+          <ClockIcon />
+          <span className="sb-nav__label">自动化</span>
+          {enabledAutomations > 0 && (
+            <span className="sb-nav__count">{enabledAutomations}</span>
           )}
         </button>
       </nav>
@@ -1119,6 +1133,16 @@ function ArchiveIcon() {
       <path d="M3.5 7h17M4.5 7l1.3-3h12.4L19.5 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M5.5 7v11a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5V7" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
       <path d="M9.8 11.5h4.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** 自动化：时钟。 */
+function ClockIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="8.3" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M12 7.5V12l3 2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

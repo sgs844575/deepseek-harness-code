@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { InteractionBehaviorDto, TerminalShellDto } from '../../shared/protocol.js';
+import type {
+  AutomationDto,
+  AutomationScheduleDto,
+  InteractionBehaviorDto,
+  TerminalShellDto,
+} from '../../shared/protocol.js';
 import { requireBridge } from '../ipc/api';
 import {
   MONO_FONT_PRESETS,
@@ -18,7 +23,15 @@ export interface SettingsViewProps {
   initialSection?: SettingsSectionId;
 }
 
-export type SettingsSectionId = 'general' | 'appearance' | 'model' | 'behavior' | 'rules' | 'mcp' | 'data';
+export type SettingsSectionId =
+  | 'general'
+  | 'appearance'
+  | 'model'
+  | 'behavior'
+  | 'rules'
+  | 'automation'
+  | 'mcp'
+  | 'data';
 
 const NAV_GROUPS: { label: string; items: { id: SettingsSectionId; title: string }[] }[] = [
   {
@@ -38,7 +51,10 @@ const NAV_GROUPS: { label: string; items: { id: SettingsSectionId; title: string
   },
   {
     label: '扩展',
-    items: [{ id: 'mcp', title: 'MCP 服务器' }],
+    items: [
+      { id: 'automation', title: '自动化' },
+      { id: 'mcp', title: 'MCP 服务器' },
+    ],
   },
   {
     label: '数据',
@@ -52,6 +68,7 @@ const SECTION_TITLES: Record<SettingsSectionId, string> = {
   model: '模型服务',
   behavior: '交互行为',
   rules: '项目规则',
+  automation: '自动化',
   mcp: 'MCP 服务器',
   data: '数据',
 };
@@ -127,6 +144,7 @@ export function SettingsView({ onClose, initialSection = 'general' }: SettingsVi
             {section === 'appearance' && <AppearanceSection />}
             {section === 'behavior' && <BehaviorSection />}
             {section === 'rules' && <RulesSection />}
+            {section === 'automation' && <AutomationSection />}
             {section === 'data' && <DataSection />}
           </>
         )}
@@ -455,6 +473,278 @@ function RulesEditor({
           </button>
         </div>
         {error.length > 0 && <div className="settings-row__desc settings-row__desc--accent">{error}</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── 自动化 ─────────────────────────── */
+
+const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+function describeSchedule(schedule: AutomationScheduleDto): string {
+  if (schedule.type === 'daily') return `每天 ${schedule.time}`;
+  if (schedule.type === 'weekly') return `每${WEEKDAY_LABELS[schedule.weekday] ?? '周一'} ${schedule.time}`;
+  return `每 ${schedule.minutes} 分钟`;
+}
+
+function formatRunStamp(at: number | undefined, status: string | undefined): string {
+  if (at === undefined) return '尚未运行';
+  const date = new Date(at);
+  const stamp = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  if (status === undefined || status === 'ok') return `${stamp} · 成功`;
+  return `${stamp} · ${status}`;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/**
+ * 自动化分区：定时任务的创建与管理。到点由主进程在当前工作区
+ * 创建会话并注入 prompt（结果进入会话流）；harness 未就绪时跳过
+ * 不占触发位，应用关闭期间错过的触发不补跑。
+ */
+function AutomationSection() {
+  const { settings, update } = useAppSettings();
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const patch = (id: string, changes: Partial<AutomationDto>): void => {
+    update({
+      automations: settings.automations.map((item) => (item.id === id ? { ...item, ...changes } : item)),
+    });
+  };
+
+  const remove = (id: string): void => {
+    update({ automations: settings.automations.filter((item) => item.id !== id) });
+    if (editingId === id) {
+      setEditingId(null);
+      setFormOpen(false);
+    }
+  };
+
+  const editing = settings.automations.find((item) => item.id === editingId);
+
+  const save = (automation: AutomationDto): void => {
+    const exists = settings.automations.some((item) => item.id === automation.id);
+    update({
+      automations: exists
+        ? settings.automations.map((item) => (item.id === automation.id ? automation : item))
+        : [...settings.automations, automation],
+    });
+    setFormOpen(false);
+    setEditingId(null);
+  };
+
+  return (
+    <div className="settingspage__cards">
+      <section className="settingscard">
+        <div className="settings-row settings-row--foot">
+          <span className="automation-count">
+            {settings.automations.length > 0
+              ? `${settings.automations.filter((item) => item.enabled).length} 个启用 / 共 ${settings.automations.length} 个`
+              : ''}
+          </span>
+          <button
+            type="button"
+            className="settingspage__save settingspage__save--primary"
+            onClick={() => {
+              setEditingId(null);
+              setFormOpen((open) => !open || editingId !== null);
+            }}
+          >
+            新建任务
+          </button>
+        </div>
+        {formOpen && (
+          <AutomationForm
+            initial={editing}
+            onCancel={() => {
+              setFormOpen(false);
+              setEditingId(null);
+            }}
+            onSave={save}
+          />
+        )}
+        {settings.automations.length === 0 ? (
+          <div className="settings-row">
+            <div className="settings-row__main">
+              <div className="settings-row__desc">
+                暂无自动化任务。新建一个，让 Agent 定时在当前工作区执行——每日简报、仓库检查、定时继续任务等。
+              </div>
+            </div>
+          </div>
+        ) : (
+          settings.automations.map((item) => (
+            <div key={item.id} className="settings-row settings-row--stack">
+              <div className="settings-row__main">
+                <div className="settings-row__title">
+                  {item.name}
+                  {!item.enabled && <span className="automation-off">已停用</span>}
+                </div>
+                <div className="settings-row__desc">
+                  {describeSchedule(item.schedule)} · 上次：{formatRunStamp(item.lastRunAt, item.lastRunStatus)}
+                </div>
+                <div className="automation-prompt" title={item.prompt}>
+                  {item.prompt}
+                </div>
+              </div>
+              <div className="settings-row__control">
+                <button
+                  type="button"
+                  className="settingspage__save"
+                  onClick={() => {
+                    setEditingId(item.id);
+                    setFormOpen(true);
+                  }}
+                >
+                  编辑
+                </button>
+                <button type="button" className="settingspage__save settingspage__save--danger" onClick={() => remove(item.id)}>
+                  删除
+                </button>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  className="switch"
+                  checked={item.enabled}
+                  aria-label={`${item.name} 启用`}
+                  onChange={(event) => patch(item.id, { enabled: event.target.checked })}
+                />
+              </div>
+            </div>
+          ))
+        )}
+        <div className="settings-note">
+          任务在主进程定时调度，到点在「当前工作区」创建新会话并注入提示词，结果进入该会话
+          （侧栏可见）；harness 未就绪时本轮跳过、不占用触发位，应用关闭期间错过的触发不补跑。
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/** 新建 / 编辑表单：名称、提示词、调度（每天 / 每周 / 间隔分钟）。 */
+function AutomationForm({
+  initial,
+  onCancel,
+  onSave,
+}: {
+  initial: AutomationDto | undefined;
+  onCancel(): void;
+  onSave(automation: AutomationDto): void;
+}) {
+  const [name, setName] = useState(initial?.name ?? '');
+  const [prompt, setPrompt] = useState(initial?.prompt ?? '');
+  const [type, setType] = useState<AutomationScheduleDto['type']>(initial?.schedule.type ?? 'daily');
+  const [time, setTime] = useState(initial?.schedule.type === 'weekly' || initial?.schedule.type === 'daily' ? initial.schedule.time : '09:00');
+  const [weekday, setWeekday] = useState(initial?.schedule.type === 'weekly' ? initial.schedule.weekday : 1);
+  const [minutes, setMinutes] = useState(initial?.schedule.type === 'interval' ? initial.schedule.minutes : 30);
+
+  const canSave = name.trim().length > 0 && prompt.trim().length > 0;
+
+  const submit = (): void => {
+    const schedule: AutomationScheduleDto =
+      type === 'weekly'
+        ? { type, weekday, time }
+        : type === 'interval'
+          ? { type, minutes }
+          : { type: 'daily', time };
+    onSave({
+      id: initial?.id ?? crypto.randomUUID(),
+      name: name.trim(),
+      prompt: prompt.trim(),
+      schedule,
+      enabled: initial?.enabled ?? true,
+      createdAt: initial?.createdAt ?? Date.now(),
+      ...(initial?.lastRunAt !== undefined ? { lastRunAt: initial.lastRunAt } : {}),
+      ...(initial?.lastRunStatus !== undefined ? { lastRunStatus: initial.lastRunStatus } : {}),
+    });
+  };
+
+  return (
+    <div className="settings-row settings-row--stack automation-form">
+      <div className="settings-row__main">
+        <div className="settings-row__title">{initial === undefined ? '新建任务' : `编辑：${initial.name}`}</div>
+        <div className="settings-row__inline">
+          <input
+            type="text"
+            className="settingspage__input"
+            placeholder="任务名称，如「每日简报」"
+            value={name}
+            maxLength={60}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <select
+            className="settingspage__select"
+            value={type}
+            onChange={(event) => setType(event.target.value as AutomationScheduleDto['type'])}
+          >
+            <option value="daily">每天</option>
+            <option value="weekly">每周</option>
+            <option value="interval">间隔分钟</option>
+          </select>
+          {type === 'daily' && (
+            <input
+              type="time"
+              className="settingspage__input settingspage__input--time"
+              value={time}
+              onChange={(event) => setTime(event.target.value)}
+            />
+          )}
+          {type === 'weekly' && (
+            <>
+              <select
+                className="settingspage__select"
+                value={String(weekday)}
+                onChange={(event) => setWeekday(Number(event.target.value))}
+              >
+                {WEEKDAY_LABELS.map((label, index) => (
+                  <option key={label} value={String(index)}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="time"
+                className="settingspage__input settingspage__input--time"
+                value={time}
+                onChange={(event) => setTime(event.target.value)}
+              />
+            </>
+          )}
+          {type === 'interval' && (
+            <input
+              type="number"
+              className="settingspage__input settingspage__input--time"
+              min={1}
+              max={1440}
+              value={minutes}
+              onChange={(event) => setMinutes(Math.min(1440, Math.max(1, Number(event.target.value) || 1)))}
+            />
+          )}
+        </div>
+        <textarea
+          className="settingspage__rules-editor"
+          value={prompt}
+          spellCheck={false}
+          placeholder="到点注入给 Agent 的提示词，如「总结今天的待办并输出简报」"
+          onChange={(event) => setPrompt(event.target.value)}
+        />
+      </div>
+      <div className="settings-row__control">
+        <button type="button" className="settingspage__save" onClick={onCancel}>
+          取消
+        </button>
+        <button
+          type="button"
+          className="settingspage__save settingspage__save--primary"
+          disabled={!canSave}
+          onClick={submit}
+        >
+          保存任务
+        </button>
       </div>
     </div>
   );

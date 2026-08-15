@@ -7,6 +7,7 @@ import { initLifecycle } from './lifecycle.js';
 import { channels } from '../shared/channels.js';
 import { AppSettingsStore, loadAppSettingsFile } from './settings/app-settings-store.js';
 import { SettingsService, applyProxyEnv } from './settings/settings-service.js';
+import { AutomationService } from './automation/automation-service.js';
 import { ProviderStore } from './providers/provider-store.js';
 import { ProviderService } from './providers/provider-service.js';
 import { McpStore } from './mcp/mcp-store.js';
@@ -68,12 +69,15 @@ const settingsService = new SettingsService({
   harness: harnessService,
   windowManager,
 });
+// 自动化调度：设置即数据源（store 变更即时生效），触发走 harness 会话面。
+const automationService = new AutomationService({ store: settingsStore, harness: harnessService });
 
 initLifecycle({
   windowManager,
   onReady: () => {
     registerIpcHandlers({ harness: harnessService, settings: settingsService, providers: providerService, mcp: mcpService });
     settingsService.start();
+    automationService.start();
     // 宿主状态与事件流推送到所有窗口；事件同时喂给设置服务（通知 / 提问自动继续）。
     harnessService.onStatus((state) => broadcast(channels.host.statusChanged, state));
     harnessService.onEvent((envelope) => {
@@ -97,5 +101,6 @@ initLifecycle({
 
 // 停机时尽力销毁 harness 根 fiber（会话日志按事件即时落盘，尽力即可）。
 app.on('before-quit', () => {
+  automationService.stop();
   void harnessService.stop();
 });

@@ -232,6 +232,14 @@ export function Composer({
         run: () => onOpenSettings('rules'),
       },
       {
+        id: 'automation',
+        label: '自动化',
+        alias: 'automation',
+        hint: '定时任务（每天 / 每周 / 间隔分钟）',
+        icon: <ClockIcon />,
+        run: () => onOpenSettings('automation'),
+      },
+      {
         id: 'mcp',
         label: 'MCP 服务器',
         alias: 'mcp',
@@ -1100,6 +1108,16 @@ function RulesIcon() {
       />
       <path d="M14 3.7V9h5" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
       <path d="M8.5 13h7M8.5 16.5h4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** 自动化：时钟。 */
+function ClockIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="8.3" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M12 7.5V12l3 2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

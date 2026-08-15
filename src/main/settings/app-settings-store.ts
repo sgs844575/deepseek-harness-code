@@ -1,8 +1,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type {
   AgentModeDto,
   AppSettingsDto,
+  AutomationDto,
+  AutomationScheduleDto,
   ProjectEntryDto,
   TerminalShellDto,
 } from '../../shared/protocol.js';
@@ -35,6 +38,7 @@ export const DEFAULT_APP_SETTINGS: AppSettingsDto = {
   archiveRetentionDays: 7,
   dataPath: '',
   projects: [],
+  automations: [],
   sandboxEnabled: false,
 };
 
@@ -87,6 +91,56 @@ function normalizeProjects(raw: unknown): ProjectEntryDto[] {
   return [...byPath.values()];
 }
 
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+/** 调度归一化：daily/weekly 的 time 校验 HH:mm，weekly.weekday 收敛 0-6，
+ * interval.minutes 收敛 1-1440；非法回落每天 09:00。 */
+function normalizeAutomationSchedule(raw: unknown): AutomationScheduleDto {
+  if (typeof raw !== 'object' || raw === null) return { type: 'daily', time: '09:00' };
+  const record = raw as Record<string, unknown>;
+  const time = typeof record.time === 'string' && TIME_PATTERN.test(record.time) ? record.time : '09:00';
+  if (record.type === 'weekly') {
+    const weekday = Math.min(6, Math.max(0, Math.round(Number(record.weekday))));
+    return { type: 'weekly', weekday: Number.isFinite(weekday) ? weekday : 1, time };
+  }
+  if (record.type === 'interval') {
+    const minutes = Math.round(Number(record.minutes));
+    return { type: 'interval', minutes: Number.isFinite(minutes) ? Math.min(1440, Math.max(1, minutes)) : 60 };
+  }
+  return { type: 'daily', time };
+}
+
+/** 自动化任务归一化：id 兜底、字段截断、调度归一化；缺 name/prompt 的项剔除。 */
+function normalizeAutomations(raw: unknown): AutomationDto[] {
+  if (!Array.isArray(raw)) return [];
+  const list: AutomationDto[] = [];
+  for (const item of raw.slice(0, 50)) {
+    if (typeof item !== 'object' || item === null) continue;
+    const record = item as Record<string, unknown>;
+    const name = typeof record.name === 'string' ? record.name.trim().slice(0, 60) : '';
+    const prompt = typeof record.prompt === 'string' ? record.prompt.trim().slice(0, 8000) : '';
+    if (name.length === 0 || prompt.length === 0) continue;
+    list.push({
+      id: typeof record.id === 'string' && record.id.length > 0 ? record.id : randomUUID(),
+      name,
+      prompt,
+      schedule: normalizeAutomationSchedule(record.schedule),
+      enabled: record.enabled !== false,
+      createdAt: typeof record.createdAt === 'number' && Number.isFinite(record.createdAt) ? record.createdAt : Date.now(),
+      ...(typeof record.lastRunAt === 'number' && Number.isFinite(record.lastRunAt)
+        ? { lastRunAt: record.lastRunAt }
+        : {}),
+      ...(typeof record.lastRunStatus === 'string' && record.lastRunStatus.length > 0
+        ? { lastRunStatus: record.lastRunStatus.slice(0, 200) }
+        : {}),
+    });
+  }
+  return list;
+}
+
+export { normalizeAutomationSchedule, normalizeAutomations, WEEKDAY_NAMES };
+
 /** 逐字段防御性归一化：未知/非法值回落默认，保证磁盘脏数据不会击穿运行时。 */
 export function normalizeAppSettings(raw: unknown): AppSettingsDto {
   const record = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
@@ -116,6 +170,7 @@ export function normalizeAppSettings(raw: unknown): AppSettingsDto {
     archiveRetentionDays: clampRetentionDays(record.archiveRetentionDays),
     dataPath: typeof record.dataPath === 'string' ? record.dataPath : '',
     projects: normalizeProjects(record.projects),
+    automations: normalizeAutomations(record.automations),
     sandboxEnabled: record.sandboxEnabled === true,
   };
 }

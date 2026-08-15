@@ -206,6 +206,26 @@ export interface ProjectEntryDto {
   name: string;
 }
 
+/** 自动化调度：daily 每天 time（HH:mm）/ weekly 每周 weekday(0-6,0=周日) time / interval 每 minutes 分钟。 */
+export type AutomationScheduleDto =
+  | { type: 'daily'; time: string }
+  | { type: 'weekly'; weekday: number; time: string }
+  | { type: 'interval'; minutes: number };
+
+/** 自动化任务：到点在当前工作区创建会话并注入 prompt（结果进入会话流）。 */
+export interface AutomationDto {
+  id: string;
+  name: string;
+  prompt: string;
+  schedule: AutomationScheduleDto;
+  enabled: boolean;
+  createdAt: number;
+  /** 上次实际触发时间（毫秒；跳过不占用触发位，未运行过为空）。 */
+  lastRunAt?: number;
+  /** 上次触发结果：ok / error：… / skipped：…。 */
+  lastRunStatus?: string;
+}
+
 /** 集成终端 Shell（三期终端接入时消费，现阶段仅持久化偏好）。 */
 export type TerminalShellDto = 'system' | 'powershell' | 'cmd' | 'gitbash';
 
@@ -253,6 +273,8 @@ export interface AppSettingsDto {
   dataPath: string;
   /** 已注册项目列表（添加项目 / 切换工作区用）。 */
   projects: ProjectEntryDto[];
+  /** 自动化任务（主进程定时调度，到点创建会话注入 prompt）。 */
+  automations: AutomationDto[];
   /** 沙箱栈（Windows ACL 读写约束 pwsh / fs 工具；重启应用后生效，默认关闭）。 */
   sandboxEnabled: boolean;
 }

@@ -65,6 +65,9 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
   const [defaultPreset, setDefaultPreset] = useState('');
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
+  /** 会话列表最新值（事件流回调里做「未知会话」判定，规避旧闭包）。 */
+  const sessionsRef = useRef<SessionSummaryDto[]>([]);
+  sessionsRef.current = sessions;
   const noticeTimer = useRef<number | null>(null);
   /** 已处理过的工作区（宿主就绪流按 workspace 变化识别项目切换）。 */
   const workspaceSeenRef = useRef('');
@@ -282,6 +285,10 @@ export function Workspace({ onOpenSettings }: WorkspaceProps) {
     return bridge.session.onEvent((envelope: HarnessEventDto) => {
       if (envelope.kind === 'session-event') {
         touchSessionActivity(envelope.sessionId);
+        // 列表外的未知会话开始产生事件（自动化任务后台建会话等）→ 刷新侧栏。
+        if (!sessionsRef.current.some((session) => session.id === envelope.sessionId)) {
+          void refreshSessions();
+        }
         setStates((previous) => {
           const current = previous[envelope.sessionId] ?? initialSessionState();
           const next = foldEvent(current, envelope.event);
