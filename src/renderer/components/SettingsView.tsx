@@ -8,6 +8,7 @@ import {
   type ThemeMode,
 } from '../state/appearance';
 import { useAppSettings } from '../state/appSettings';
+import { McpSettings } from './McpSettings';
 import { ProviderSettings } from './ProviderSettings';
 
 export interface SettingsViewProps {
@@ -17,7 +18,7 @@ export interface SettingsViewProps {
   initialSection?: SettingsSectionId;
 }
 
-export type SettingsSectionId = 'general' | 'appearance' | 'model' | 'behavior' | 'data';
+export type SettingsSectionId = 'general' | 'appearance' | 'model' | 'behavior' | 'mcp' | 'data';
 
 const NAV_GROUPS: { label: string; items: { id: SettingsSectionId; title: string }[] }[] = [
   {
@@ -33,6 +34,10 @@ const NAV_GROUPS: { label: string; items: { id: SettingsSectionId; title: string
     items: [{ id: 'behavior', title: '交互行为' }],
   },
   {
+    label: '扩展',
+    items: [{ id: 'mcp', title: 'MCP 服务器' }],
+  },
+  {
     label: '数据',
     items: [{ id: 'data', title: '数据' }],
   },
@@ -43,6 +48,7 @@ const SECTION_TITLES: Record<SettingsSectionId, string> = {
   appearance: '外观',
   model: '模型服务',
   behavior: '交互行为',
+  mcp: 'MCP 服务器',
   data: '数据',
 };
 
@@ -107,6 +113,9 @@ export function SettingsView({ onClose, initialSection = 'general' }: SettingsVi
         {section === 'model' ? (
           // 模型服务为两级页面（供应商列表 / 供应商配置），自带各自的页头标题。
           <ProviderSettings />
+        ) : section === 'mcp' ? (
+          // MCP 服务器为独立管理页（页头带应用变更按钮）。
+          <McpSettings />
         ) : (
           <>
             <h1 className="settingspage__title">{SECTION_TITLES[section]}</h1>
@@ -218,7 +227,8 @@ function GeneralSection() {
 /* ─────────────────────────── 交互行为 ─────────────────────────── */
 
 function BehaviorSection() {
-  const { settings, update } = useAppSettings();
+  const { settings, boot, update } = useAppSettings();
+  const sandboxPending = boot.sandboxEnabled !== settings.sandboxEnabled;
   return (
     <div className="settingspage__cards">
       <section className="settingscard">
@@ -249,6 +259,16 @@ function BehaviorSection() {
           checked={settings.showTodos}
           onChange={(checked) => update({ showTodos: checked })}
         />
+      </section>
+      <section className="settingscard">
+        <SwitchRow
+          title="命令沙箱（实验）"
+          description="pwsh 与文件写入默认限制在工作区和临时目录内（Windows ACL 令牌约束），越界操作经审批升级；read-only 场景下 PowerShell 会进入受限语言模式。修改后重启应用生效。"
+          checked={settings.sandboxEnabled}
+          onChange={(checked) => update({ sandboxEnabled: checked })}
+        >
+          {sandboxPending && <RelaunchButton />}
+        </SwitchRow>
       </section>
     </div>
   );

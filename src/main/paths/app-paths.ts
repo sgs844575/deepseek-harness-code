@@ -15,6 +15,7 @@ import { APP_SETTINGS_FILE_NAME } from '../settings/app-settings-store.js';
  *   ~/.deep-seek-harness-code/
  *     app-settings.json   客户端自身设置
  *     providers.json      多供应商模型配置（含 API keys）
+ *     mcp-servers.json    MCP 服务器列表（boot 补丁注入 mcp-client 插件行）
  *     dsh-home/           harness 数据（settings.yaml / .credentials.yaml / sessions/）
  *     cache/              缓存（可随时删除重建）
  */
@@ -57,6 +58,11 @@ export function appSettingsFilePath(): string {
 /** 供应商配置文件路径（<appHome>/providers.json）。 */
 export function providersFilePath(): string {
   return path.join(resolveAppHome(), 'providers.json');
+}
+
+/** MCP 服务器配置文件路径（<appHome>/mcp-servers.json）。 */
+export function mcpServersFilePath(): string {
+  return path.join(resolveAppHome(), 'mcp-servers.json');
 }
 
 /**

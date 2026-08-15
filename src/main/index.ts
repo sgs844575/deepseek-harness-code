@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { WindowManager } from './windows/window-manager.js';
 import { HarnessService } from './harness/harness-service.js';
+import { buildBootPatches } from './harness/composition.js';
 import { registerIpcHandlers } from './ipc/index.js';
 import { initLifecycle } from './lifecycle.js';
 import { channels } from '../shared/channels.js';
@@ -8,8 +9,11 @@ import { AppSettingsStore, loadAppSettingsFile } from './settings/app-settings-s
 import { SettingsService, applyProxyEnv } from './settings/settings-service.js';
 import { ProviderStore } from './providers/provider-store.js';
 import { ProviderService } from './providers/provider-service.js';
+import { McpStore } from './mcp/mcp-store.js';
+import { McpService } from './mcp/mcp-service.js';
 import {
   appSettingsFilePath,
+  mcpServersFilePath,
   migrateLegacyUserData,
   providersFilePath,
   resolveCacheDir,
@@ -20,7 +24,17 @@ import {
  * 阅读顺序建议：lifecycle → window-manager → harness-service → settings → ipc → preload。
  */
 const windowManager = new WindowManager();
-const harnessService = new HarnessService();
+const mcpStore = new McpStore(mcpServersFilePath());
+const mcpService = new McpService(mcpStore);
+// boot 补丁在每次 start 时读取最新应用设置（沙箱开关）与 MCP 服务器列表。
+const harnessService = new HarnessService({
+  buildPatches: () =>
+    buildBootPatches({
+      mcpServers: mcpStore.enabledRecords(),
+      sandbox: loadAppSettingsFile(appSettingsFilePath()).sandboxEnabled,
+      workspaceRoot: process.env.DSH_CWD ?? process.cwd(),
+    }),
+});
 
 // 旧布局（Electron userData）一次性迁移到 ~/.deep-seek-harness-code；
 // 必须先于任何设置/路径读取执行。
@@ -58,7 +72,7 @@ const settingsService = new SettingsService({
 initLifecycle({
   windowManager,
   onReady: () => {
-    registerIpcHandlers({ harness: harnessService, settings: settingsService, providers: providerService });
+    registerIpcHandlers({ harness: harnessService, settings: settingsService, providers: providerService, mcp: mcpService });
     settingsService.start();
     // 宿主状态与事件流推送到所有窗口；事件同时喂给设置服务（通知 / 提问自动继续）。
     harnessService.onStatus((state) => broadcast(channels.host.statusChanged, state));
@@ -66,8 +80,9 @@ initLifecycle({
       settingsService.handleHarnessEvent(envelope);
       broadcast(channels.session.event, envelope);
     });
-    // 供应商快照变更推送（多窗口同步）。
+    // 供应商快照与 MCP 列表变更推送（多窗口同步）。
     providerStore.subscribe((snapshot) => broadcast(channels.providers.changed, snapshot));
+    mcpStore.subscribe((servers) => broadcast(channels.mcp.changed, servers));
     const mainWin = windowManager.createMainWindow();
     settingsService.attachWindow(mainWin);
     // harness 启动不阻塞窗口展示；状态经 host:status-changed 推送。
@@ -75,6 +90,7 @@ initLifecycle({
     void harnessService.start().then(() => {
       harnessService.setKeyResolver(() => providerService.keyForNextTurn());
       providerService.attach(harnessService);
+      mcpService.attach(harnessService);
     });
   },
 });
